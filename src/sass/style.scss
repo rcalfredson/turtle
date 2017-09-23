@@ -1,0 +1,44 @@
+@import 'toolkit/reset';
+
+$background-color-top: #9beca6;
+$background-color-bottom: #2e8135;
+$maincontent-border: rgba(28, 36, 31, .8);
+$maincontent-color: rgba(155, 196, 169, .8);
+
+html {
+  background: linear-gradient($background-color-top, $background-color-bottom);
+  background-repeat: no-repeat;
+  background-size: cover;
+  min-height: 100%;
+}
+
+body {
+  font-family: 'Roboto Slab';
+  text-align: center;
+
+  .welcome {
+    display: block;
+    font-size: 36px;
+    opacity: .7;
+    padding-bottom: 5%;
+    padding-top: 20px;
+  }
+
+  .maincontent {
+    background-color: $maincontent-color;
+    border: 7px dotted $maincontent-border;
+    margin: 0 auto;
+    padding-bottom: 7.5%;
+    padding-top: 7.5%;
+    width: 43%;
+  }
+
+  .siteinfo {
+    bottom: 0;
+    left: 0;
+    padding: 1rem;
+    position: absolute;
+    right: 0;
+    text-align: center;
+  }
+}

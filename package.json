@@ -1,0 +1,48 @@
+{
+  "name": "turtle",
+  "version": "1.0.0",
+  "description": "A web app to implement some of the basic decision metrics and algorithms used in the \"turtle trading\" strategy created by Richard Dennis.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "pretest": "gulp eslint",
+    "test": "gulp test",
+    "gulp": "gulp"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rcalfredson/turtle.git"
+  },
+  "keywords": [
+    "finance",
+    "stocks",
+    "trading"
+  ],
+  "author": "Robert C. Alfredson",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/rcalfredson/turtle/issues"
+  },
+  "homepage": "https://github.com/rcalfredson/turtle#readme",
+  "dependencies": {
+    "cfenv": "^1.0.0",
+    "express": "^4.13.3",
+    "pug": "^2.0.0-rc.4"
+  },
+  "devDependencies": {
+    "browser-sync": "^2.8.2",
+    "eslint-config-punchcard": "^1.0.1",
+    "eyeglass": "^1.1.0",
+    "gulp": "^3.9.0",
+    "gulp-autoprefixer": "^2.3.1",
+    "gulp-eslint": "^3.0.0",
+    "gulp-if": "^1.2.5",
+    "gulp-imagemin": "^2.3.0",
+    "gulp-nodemon": "^2.0.3",
+    "gulp-sass": "^2.0.4",
+    "gulp-sass-lint": "^1.1.1",
+    "gulp-sourcemaps": "^1.5.2",
+    "gulp-uglify": "^1.2.0",
+    "sass-toolkit": "^2.10.0"
+  }
+}
