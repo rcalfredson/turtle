@@ -1,0 +1,3 @@
+extends:
+  - punchcard/configurations/browser
+root: true
