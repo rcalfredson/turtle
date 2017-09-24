@@ -27,7 +27,7 @@ app.get('/', (req, res) => {
   res.render('index');
 });
 
-app.get('/getFourWeekBreakout', stockData.getFourWeekBreakout);
+app.get('/detectFourWeekBreakout', stockData.detectFourWeekBreakout);
 
 //////////////////////////////
 // Start the server

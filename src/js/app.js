@@ -1,13 +1,16 @@
 (function app() {
   'use strict';
 
-  window.addEventListener('DOMContentLoaded', function appDCL() {
-    console.log('Hello World'); // eslint-disable-line no-console
-    fetch('/getFourWeekBreakout?sym=RAD').then(function (response) { // eslint-disable-line func-names
-      
+  const renderFourWeekBreakout = function renderFourWeekBreakout(symbol) {
+    fetch('/detectFourWeekBreakout?sym=' + symbol).then(function returnJSON(response) {
       return response.json();
-    }).then(function (json) { // eslint-disable-line func-names
+    }).then(function printJSON(json) {
       console.log(json); // eslint-disable-line no-console
     });
+  };
+
+  window.addEventListener('DOMContentLoaded', function appDCL() {
+    console.log('Hello World'); // eslint-disable-line no-console
+    renderFourWeekBreakout('RAD');
   });
 }());
