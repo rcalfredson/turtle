@@ -2,8 +2,12 @@
 
 $background-color-top: #9beca6;
 $background-color-bottom: #2e8135;
-$maincontent-border: rgba(28, 36, 31, .8);
+$header-background-color: #a0daa0;
+$text-color: #0600bd;
+$maincontent-border-color: rgba(28, 36, 31, .8);
 $maincontent-color: rgba(155, 196, 169, .8);
+$maincontent-width: 92%;
+$tickercontent-width: $maincontent-width + 3%;
 
 html {
   background: linear-gradient($background-color-top, $background-color-bottom);
@@ -13,29 +17,80 @@ html {
 }
 
 body {
-  font-family: 'Roboto Slab';
+  color: $text-color;
+  font-family: 'Arvo';
   text-align: center;
+
+  header {
+    background-color: $header-background-color;
+    border-bottom: 5px solid $maincontent-border-color;
+    border-top: 5px solid $maincontent-border-color;
+  }
 
   .welcome {
     display: block;
-    font-size: 36px;
+    font-size: 43px;
     opacity: .7;
-    padding-bottom: 5%;
+    padding-left: .5 * (100% - $maincontent-width);
     padding-top: 20px;
+    text-align: left;
+  }
+
+  .desc {
+    font-size: 23px;
+    opacity: .7;
+    padding-bottom: 30px;
+    padding-left: .5 * (100% - $maincontent-width);
+    padding-top: 15px;
+    text-align: left;
+  }
+
+  main {
+    padding-top: 25px;
   }
 
   .maincontent {
     background-color: $maincontent-color;
-    border: 7px dotted $maincontent-border;
+    border: 3px solid $maincontent-border-color;
+    border-radius: 4px;
     margin: 0 auto;
+    opacity: .7;
     padding-bottom: 7.5%;
-    padding-top: 7.5%;
-    width: 43%;
+    padding-top: .8%;
+    width: $maincontent-width;
+
+    label {
+      display: block;
+      font-size: 32px;
+      padding-bottom: .5%;
+      padding-left: .5 * (100% - $tickercontent-width);
+      text-align: left;
+    }
+
+    p {
+      font-size: 20px;
+      padding-top: 12px;
+    }
+
+    .search {
+      border: 1px solid $maincontent-border-color;
+      border-radius: 7px;
+      font-size: 25px;
+      height: 32px;
+      resize: none;
+      text-align: center;
+      width: $tickercontent-width;
+    }
+
+    .options {
+      display: block;
+    }
   }
 
   .siteinfo {
     bottom: 0;
     left: 0;
+    opacity: .7;
     padding: 1rem;
     position: absolute;
     right: 0;

@@ -1,1 +1,0 @@
-{"version":3,"sources":["app.js"],"names":["window","addEventListener","console","log"],"mappings":"CAAC,WACC,YAEAA,QAAOC,iBAAiB,mBAAoB,WAC1CC,QAAQC,IAAI","file":"../app.js","sourcesContent":["(function app() {\n  'use strict';\n\n  window.addEventListener('DOMContentLoaded', function appDCL() {\n    console.log('Hello World'); // eslint-disable-line no-console\n  });\n}());\n"]}

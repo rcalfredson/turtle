@@ -5,13 +5,15 @@ html(lang="en")
     title Hello
     meta(name="viewport" content="width=device-width, initial-scale=1.0")
     link(rel="stylesheet" href="/css/style.css")
-    link(href="https://fonts.googleapis.com/css?family=Roboto+Slab" rel="stylesheet")
-  body
+    link(href="https://fonts.googleapis.com/css?family=Arvo" rel="stylesheet")
     header
-      h1.welcome Welcome to Turtle.
+      h1.welcome Welcome to Turtle,
+      h2.desc a security analysis tool that employs the "turtle trading" rules developed by Richard Dennis.
     main
       section.maincontent
-        p Here is some text.
+        label(for="tickersearch") Search for a ticker symbol
+        input.search(id="tickersearch",type="textarea",placeholder="e.g. GOOGL")
+        p#results Here is some text.
     footer
       p.siteinfo Copyright 2017
   script(src="/js/app.js")
