@@ -28,6 +28,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/detectFourWeekBreakout', stockData.detectFourWeekBreakout);
+app.get('/getTickerSymbols', stockData.getTickerSymbols);
 
 //////////////////////////////
 // Start the server
