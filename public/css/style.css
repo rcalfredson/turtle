@@ -1,0 +1,142 @@
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #1f2937;
+  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+header {
+  padding: 2rem 1rem 1rem;
+  text-align: center;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3rem);
+}
+
+h2 {
+  margin: 0.5rem 0 0;
+  font-size: 1.25rem;
+  color: #475569;
+}
+
+main {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 24px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.08);
+  padding: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.field-group {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.grid-2 {
+  display: grid;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.grid-2 > div {
+  display: grid;
+  gap: 0.45rem;
+}
+
+label {
+  font-weight: 600;
+  color: #334155;
+}
+
+input, button, select {
+  width: 100%;
+  font: inherit;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  padding: 0.9rem 1rem;
+  background: #f8fafc;
+}
+
+button {
+  cursor: pointer;
+  background: #0f766e;
+  color: white;
+  border-color: transparent;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.75;
+  transform: none;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  background: #115e59;
+}
+
+.symbol-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.symbol-item {
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  cursor: pointer;
+}
+
+.symbol-item:last-child {
+  border-bottom: none;
+}
+
+.symbol-item:hover {
+  background: #e2e8f0;
+}
+
+.summary dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.25rem 2rem;
+  margin: 0;
+  padding: 0;
+}
+
+.summary dt {
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+.summary dd {
+  margin: 0;
+}
+
+.error {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+@media (min-width: 720px) {
+  .grid-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}

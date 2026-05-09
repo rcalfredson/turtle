@@ -1,4 +1,9 @@
 node_modules
 public
+!public/
+!public/js/
+!public/css/
+!public/js/app.js
+!public/css/style.css
 .env
 *.log
