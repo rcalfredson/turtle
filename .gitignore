@@ -7,3 +7,4 @@ public
 !public/css/style.css
 .env
 *.log
+.cache/

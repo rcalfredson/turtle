@@ -19,4 +19,14 @@ npm start
 
 3. Open `http://localhost:3000`
 
-> Requires Node.js 18 or newer.
+> Requires Node.js 24 or newer.
+
+## Market data cache
+
+Yahoo historical chart responses are cached on disk in `.cache/market-data` for 24 hours by default. You can tune this with:
+
+```bash
+MARKET_DATA_CACHE=false
+MARKET_DATA_CACHE_DIR=.cache/market-data
+MARKET_DATA_CACHE_TTL_HOURS=24
+```
