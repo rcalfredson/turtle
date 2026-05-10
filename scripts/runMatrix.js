@@ -35,14 +35,36 @@ const csvColumns = [
   'finalEquity',
   'totalReturnPct',
   'maxDrawdownPct',
+  'returnToMaxDrawdown',
+  'cagrPct',
+  'equityVolatilityPct',
+  'sharpe',
+  'sortino',
   'totalTrades',
   'entries',
   'longEntries',
   'shortEntries',
+  'longTrades',
+  'shortTrades',
+  'longPnl',
+  'shortPnl',
+  'longWinRatePct',
+  'shortWinRatePct',
+  'longAvgTrade',
+  'shortAvgTrade',
   'addedUnits',
   'winningTrades',
   'losingTrades',
   'winRatePct',
+  'profitFactor',
+  'averageWin',
+  'averageLoss',
+  'medianTradePnl',
+  'largestWin',
+  'largestWinPctOfGrossProfit',
+  'largestWinPctOfNetPnl',
+  'baseUnitPnl',
+  'addedUnitPnl',
   'stopExits',
   'channelExits',
   'endOfDataExits',
@@ -174,30 +196,175 @@ const round = (value, digits = 2) => {
 
 const countTrades = (trades, predicate) => trades.filter(predicate).length;
 
+const sumTrades = (trades, selector) => trades.reduce((sum, trade) => sum + selector(trade), 0);
+
+const average = (values) => {
+  if (!values.length) {
+    return 0;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+};
+
+const median = (values) => {
+  if (!values.length) {
+    return 0;
+  }
+
+  const sorted = [...values].sort((a, b) => a - b);
+  const midpoint = Math.floor(sorted.length / 2);
+  if (sorted.length % 2) {
+    return sorted[midpoint];
+  }
+
+  return (sorted[midpoint - 1] + sorted[midpoint]) / 2;
+};
+
+const standardDeviation = (values) => {
+  if (values.length < 2) {
+    return 0;
+  }
+
+  const mean = average(values);
+  const variance = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / (values.length - 1);
+  return Math.sqrt(variance);
+};
+
+const yearsBetween = (from, to) => {
+  const start = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  const msPerYear = 365.25 * 24 * 60 * 60 * 1000;
+  const years = (end - start) / msPerYear;
+  return Number.isFinite(years) && years > 0 ? years : 0;
+};
+
+const calculateEquityReturns = (equityCurve) => {
+  const returns = [];
+  for (let index = 1; index < equityCurve.length; index += 1) {
+    const previous = equityCurve[index - 1].equity;
+    const current = equityCurve[index].equity;
+    if (previous > 0) {
+      returns.push((current - previous) / previous);
+    }
+  }
+
+  return returns;
+};
+
+const calculateRiskStats = ({ result, firstBar, lastBar, initialCapital }) => {
+  const totalReturn = (result.finalEquity - initialCapital) / initialCapital;
+  const years = yearsBetween(firstBar, lastBar);
+  const cagr = years > 0 && result.finalEquity > 0
+    ? ((result.finalEquity / initialCapital) ** (1 / years)) - 1
+    : 0;
+  const equityReturns = calculateEquityReturns(result.equityCurve);
+  const dailyVolatility = standardDeviation(equityReturns);
+  const annualizedVolatility = dailyVolatility * Math.sqrt(252);
+  const averageDailyReturn = average(equityReturns);
+  const downsideReturns = equityReturns.filter((value) => value < 0);
+  const downsideDeviation = standardDeviation(downsideReturns);
+
+  return {
+    totalReturnPct: totalReturn * 100,
+    returnToMaxDrawdown: result.maxDrawdown > 0 ? (totalReturn * 100) / result.maxDrawdown : 0,
+    cagrPct: cagr * 100,
+    equityVolatilityPct: annualizedVolatility * 100,
+    sharpe: dailyVolatility > 0 ? (averageDailyReturn / dailyVolatility) * Math.sqrt(252) : 0,
+    sortino: downsideDeviation > 0 ? (averageDailyReturn / downsideDeviation) * Math.sqrt(252) : 0,
+  };
+};
+
+const summarizeSide = (exits, direction) => {
+  const sideTrades = exits.filter((trade) => trade.direction === direction);
+  const sidePnl = sumTrades(sideTrades, (trade) => trade.pnl);
+  const wins = sideTrades.filter((trade) => trade.pnl > 0).length;
+
+  return {
+    trades: sideTrades.length,
+    pnl: sidePnl,
+    winRate: sideTrades.length ? (wins / sideTrades.length) * 100 : 0,
+    averageTrade: sideTrades.length ? sidePnl / sideTrades.length : 0,
+  };
+};
+
+const summarizeTradeQuality = (exits) => {
+  const wins = exits.filter((trade) => trade.pnl > 0);
+  const losses = exits.filter((trade) => trade.pnl < 0);
+  const grossProfit = sumTrades(wins, (trade) => trade.pnl);
+  const grossLoss = Math.abs(sumTrades(losses, (trade) => trade.pnl));
+  const largestWin = wins.length ? Math.max(...wins.map((trade) => trade.pnl)) : 0;
+  const netPnl = grossProfit - grossLoss;
+
+  return {
+    profitFactor: grossLoss > 0 ? grossProfit / grossLoss : 0,
+    averageWin: wins.length ? grossProfit / wins.length : 0,
+    averageLoss: losses.length ? sumTrades(losses, (trade) => trade.pnl) / losses.length : 0,
+    medianTradePnl: median(exits.map((trade) => trade.pnl)),
+    largestWin,
+    largestWinPctOfGrossProfit: grossProfit > 0 ? (largestWin / grossProfit) * 100 : 0,
+    largestWinPctOfNetPnl: netPnl > 0 ? (largestWin / netPnl) * 100 : 0,
+    baseUnitPnl: sumTrades(exits, (trade) => trade.basePnl || 0),
+    addedUnitPnl: sumTrades(exits, (trade) => trade.addPnl || 0),
+  };
+};
+
 const summarizeResult = ({ combo, prices, result, initialCapital, riskPercent }) => {
   const exits = result.trades.filter((trade) => trade.type === 'Exit');
   const totalPnl = exits.reduce((sum, trade) => sum + trade.pnl, 0);
+  const firstBar = prices.length ? prices[0].date : '';
+  const lastBar = prices.length ? prices[prices.length - 1].date : '';
+  const riskStats = calculateRiskStats({
+    result,
+    firstBar,
+    lastBar,
+    initialCapital,
+  });
+  const long = summarizeSide(exits, 'long');
+  const short = summarizeSide(exits, 'short');
+  const tradeQuality = summarizeTradeQuality(exits);
 
   return {
     symbol: combo.symbol,
     from: combo.from,
     to: combo.to,
     bars: prices.length,
-    firstBar: prices.length ? prices[0].date : '',
-    lastBar: prices.length ? prices[prices.length - 1].date : '',
+    firstBar,
+    lastBar,
     initialCapital,
     riskPercent,
     finalEquity: round(result.finalEquity),
-    totalReturnPct: round(((result.finalEquity - initialCapital) / initialCapital) * 100),
+    totalReturnPct: round(riskStats.totalReturnPct),
     maxDrawdownPct: round(result.maxDrawdown),
+    returnToMaxDrawdown: round(riskStats.returnToMaxDrawdown, 3),
+    cagrPct: round(riskStats.cagrPct),
+    equityVolatilityPct: round(riskStats.equityVolatilityPct),
+    sharpe: round(riskStats.sharpe, 3),
+    sortino: round(riskStats.sortino, 3),
     totalTrades: result.totalTrades,
     entries: result.entries,
     longEntries: countTrades(result.trades, (trade) => trade.type === 'Entry' && trade.direction === 'long'),
     shortEntries: countTrades(result.trades, (trade) => trade.type === 'Entry' && trade.direction === 'short'),
+    longTrades: long.trades,
+    shortTrades: short.trades,
+    longPnl: round(long.pnl),
+    shortPnl: round(short.pnl),
+    longWinRatePct: round(long.winRate),
+    shortWinRatePct: round(short.winRate),
+    longAvgTrade: round(long.averageTrade),
+    shortAvgTrade: round(short.averageTrade),
     addedUnits: result.addedUnits,
     winningTrades: result.winningTrades,
     losingTrades: Math.max(0, result.totalTrades - result.winningTrades),
     winRatePct: round(result.winRate),
+    profitFactor: round(tradeQuality.profitFactor, 3),
+    averageWin: round(tradeQuality.averageWin),
+    averageLoss: round(tradeQuality.averageLoss),
+    medianTradePnl: round(tradeQuality.medianTradePnl),
+    largestWin: round(tradeQuality.largestWin),
+    largestWinPctOfGrossProfit: round(tradeQuality.largestWinPctOfGrossProfit),
+    largestWinPctOfNetPnl: round(tradeQuality.largestWinPctOfNetPnl),
+    baseUnitPnl: round(tradeQuality.baseUnitPnl),
+    addedUnitPnl: round(tradeQuality.addedUnitPnl),
     stopExits: countTrades(exits, (trade) => trade.reason === 'stop'),
     channelExits: countTrades(exits, (trade) => trade.reason === 'channel'),
     endOfDataExits: countTrades(exits, (trade) => trade.reason === 'end-of-data'),

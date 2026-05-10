@@ -97,3 +97,32 @@ test('simulation adds units on each half-N move up to maxUnits', () => {
   assert.equal(result.addedUnits, 2);
   assert.equal(result.trades.find((trade) => trade.type === 'Exit').units, 3);
 });
+
+test('exit trades attribute pnl to base and added units', () => {
+  const prices = [
+    bar('2024-01-01', 10, 10, 9, 9.5),
+    bar('2024-01-02', 10, 10, 9, 9.5),
+    bar('2024-01-03', 10, 13, 10, 12.5),
+    bar('2024-01-04', 12.5, 13, 12, 12.5),
+  ];
+
+  const result = simulateTurtleTrading({
+    prices,
+    initialCapital: 10000,
+    riskPercent: 1,
+    entryPeriod: 2,
+    exitPeriod: 1,
+    atrPeriod: 2,
+    maxUnits: 3,
+    allowShort: false,
+  });
+  const exit = result.trades.find((trade) => trade.type === 'Exit');
+
+  assert.equal(exit.unitPnls.length, 3);
+  assert.equal(exit.basePnl, exit.unitPnls[0].pnl);
+  assert.equal(
+    exit.addPnl,
+    exit.unitPnls.slice(1).reduce((sum, unit) => sum + unit.pnl, 0),
+  );
+  assert.equal(exit.pnl, exit.basePnl + exit.addPnl);
+});
