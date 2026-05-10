@@ -32,6 +32,7 @@ const csvColumns = [
   'lastBar',
   'initialCapital',
   'riskPercent',
+  'allowShort',
   'finalEquity',
   'totalReturnPct',
   'maxDrawdownPct',
@@ -83,6 +84,7 @@ Options:
   --ranges=FROM:TO,FROM:TO       Comma-separated date ranges
   --initialCapital=100000        Starting capital
   --riskPercent=1                Risk percent per trade
+  --allowShort=true              Enable short entries (true or false)
   --limit=5                      Run only the first N combinations
   --dry-run                      Print planned combinations without fetching data
   --help                         Show this help
@@ -99,6 +101,7 @@ const parseArgs = (argv) => {
     ranges: defaultRanges,
     initialCapital: Number(process.env.STARTING_CAPITAL) || 100000,
     riskPercent: Number(process.env.RISK_PERCENT) || 1,
+    allowShort: process.env.ALLOW_SHORT === undefined ? true : parseBoolean(process.env.ALLOW_SHORT, 'ALLOW_SHORT'),
     limit: null,
     output: null,
     dryRun: false,
@@ -138,6 +141,8 @@ const parseArgs = (argv) => {
       options.initialCapital = Number(value);
     } else if (key === '--riskPercent') {
       options.riskPercent = Number(value);
+    } else if (key === '--allowShort') {
+      options.allowShort = parseBoolean(value, 'allowShort');
     } else if (key === '--limit') {
       options.limit = Number(value);
     } else {
@@ -167,6 +172,19 @@ const parseArgs = (argv) => {
 
   return options;
 };
+
+function parseBoolean(value, label) {
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === 'true') {
+    return true;
+  }
+
+  if (normalized === 'false') {
+    return false;
+  }
+
+  throw new Error(`${label} must be true or false`);
+}
 
 const buildCombinations = ({ symbols, ranges, limit }) => {
   const combinations = [];
@@ -308,7 +326,7 @@ const summarizeTradeQuality = (exits) => {
   };
 };
 
-const summarizeResult = ({ combo, prices, result, initialCapital, riskPercent }) => {
+const summarizeResult = ({ combo, prices, result, initialCapital, riskPercent, allowShort }) => {
   const exits = result.trades.filter((trade) => trade.type === 'Exit');
   const totalPnl = exits.reduce((sum, trade) => sum + trade.pnl, 0);
   const firstBar = prices.length ? prices[0].date : '';
@@ -332,6 +350,7 @@ const summarizeResult = ({ combo, prices, result, initialCapital, riskPercent })
     lastBar,
     initialCapital,
     riskPercent,
+    allowShort,
     finalEquity: round(result.finalEquity),
     totalReturnPct: round(riskStats.totalReturnPct),
     maxDrawdownPct: round(result.maxDrawdown),
@@ -373,7 +392,7 @@ const summarizeResult = ({ combo, prices, result, initialCapital, riskPercent })
   };
 };
 
-const summarizeError = ({ combo, initialCapital, riskPercent, error }) => ({
+const summarizeError = ({ combo, initialCapital, riskPercent, allowShort, error }) => ({
   symbol: combo.symbol,
   from: combo.from,
   to: combo.to,
@@ -382,6 +401,7 @@ const summarizeError = ({ combo, initialCapital, riskPercent, error }) => ({
   lastBar: '',
   initialCapital,
   riskPercent,
+  allowShort,
   finalEquity: '',
   totalReturnPct: '',
   maxDrawdownPct: '',
@@ -417,7 +437,7 @@ const toCsv = (rows) => {
   return `${lines.join('\n')}\n`;
 };
 
-const runCombo = async ({ combo, initialCapital, riskPercent }) => {
+const runCombo = async ({ combo, initialCapital, riskPercent, allowShort }) => {
   const prices = await dataProvider.getHistoricalPrices({
     symbol: combo.symbol,
     from: combo.from,
@@ -434,6 +454,7 @@ const runCombo = async ({ combo, initialCapital, riskPercent }) => {
     prices: filtered,
     initialCapital,
     riskPercent,
+    allowShort,
   });
 
   return summarizeResult({
@@ -442,6 +463,7 @@ const runCombo = async ({ combo, initialCapital, riskPercent }) => {
     result,
     initialCapital,
     riskPercent,
+    allowShort,
   });
 };
 
@@ -473,6 +495,7 @@ const main = async () => {
         combo,
         initialCapital: options.initialCapital,
         riskPercent: options.riskPercent,
+        allowShort: options.allowShort,
       });
       rows.push(row);
       process.stdout.write('ok\n');
@@ -481,6 +504,7 @@ const main = async () => {
         combo,
         initialCapital: options.initialCapital,
         riskPercent: options.riskPercent,
+        allowShort: options.allowShort,
         error,
       }));
       process.stdout.write(`error: ${error.message}\n`);
