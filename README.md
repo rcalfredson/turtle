@@ -30,3 +30,19 @@ MARKET_DATA_CACHE=false
 MARKET_DATA_CACHE_DIR=.cache/market-data
 MARKET_DATA_CACHE_TTL_HOURS=24
 ```
+
+## Matrix runner
+
+Run ticker/date-range batches from the command line and write results to CSV:
+
+```bash
+npm run matrix
+```
+
+By default this runs the built-in 18-symbol by 4-date-range matrix and writes to `reports/matrix-results-*.csv`. Useful smaller runs:
+
+```bash
+npm run matrix -- --dry-run
+npm run matrix -- --limit=3
+npm run matrix -- --symbols=AAPL,SPY --ranges=2020-01-01:2024-12-31
+```

@@ -8,3 +8,4 @@ public
 .env
 *.log
 .cache/
+reports/*.csv

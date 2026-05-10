@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "matrix": "node scripts/runMatrix.js"
   },
   "repository": {
     "type": "git",
