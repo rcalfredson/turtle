@@ -33,6 +33,7 @@ const csvColumns = [
   'initialCapital',
   'riskPercent',
   'allowShort',
+  'maxUnits',
   'finalEquity',
   'totalReturnPct',
   'maxDrawdownPct',
@@ -85,6 +86,7 @@ Options:
   --initialCapital=100000        Starting capital
   --riskPercent=1                Risk percent per trade
   --allowShort=true              Enable short entries (true or false)
+  --maxUnits=4                   Max position units; comma-separated values run a sweep
   --limit=5                      Run only the first N combinations
   --dry-run                      Print planned combinations without fetching data
   --help                         Show this help
@@ -102,6 +104,7 @@ const parseArgs = (argv) => {
     initialCapital: Number(process.env.STARTING_CAPITAL) || 100000,
     riskPercent: Number(process.env.RISK_PERCENT) || 1,
     allowShort: process.env.ALLOW_SHORT === undefined ? true : parseBoolean(process.env.ALLOW_SHORT, 'ALLOW_SHORT'),
+    maxUnits: parsePositiveIntegerList(process.env.MAX_UNITS || '4', 'MAX_UNITS'),
     limit: null,
     output: null,
     dryRun: false,
@@ -143,6 +146,8 @@ const parseArgs = (argv) => {
       options.riskPercent = Number(value);
     } else if (key === '--allowShort') {
       options.allowShort = parseBoolean(value, 'allowShort');
+    } else if (key === '--maxUnits') {
+      options.maxUnits = parsePositiveIntegerList(value, 'maxUnits');
     } else if (key === '--limit') {
       options.limit = Number(value);
     } else {
@@ -170,6 +175,10 @@ const parseArgs = (argv) => {
     throw new Error('At least one date range is required');
   }
 
+  if (!options.maxUnits.length) {
+    throw new Error('At least one maxUnits value is required');
+  }
+
   return options;
 };
 
@@ -186,11 +195,29 @@ function parseBoolean(value, label) {
   throw new Error(`${label} must be true or false`);
 }
 
-const buildCombinations = ({ symbols, ranges, limit }) => {
+function parsePositiveIntegerList(value, label) {
+  const values = String(value).split(',').map((item) => item.trim()).filter(Boolean);
+  if (!values.length) {
+    throw new Error(`${label} must include at least one positive integer`);
+  }
+
+  return values.map((item) => {
+    const parsed = Number(item);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      throw new Error(`${label} must include only positive integers`);
+    }
+
+    return parsed;
+  });
+}
+
+const buildCombinations = ({ symbols, ranges, maxUnits, limit }) => {
   const combinations = [];
   symbols.forEach((symbol) => {
     ranges.forEach((range) => {
-      combinations.push({ symbol, ...range });
+      maxUnits.forEach((units) => {
+        combinations.push({ symbol, ...range, maxUnits: units });
+      });
     });
   });
 
@@ -351,6 +378,7 @@ const summarizeResult = ({ combo, prices, result, initialCapital, riskPercent, a
     initialCapital,
     riskPercent,
     allowShort,
+    maxUnits: combo.maxUnits,
     finalEquity: round(result.finalEquity),
     totalReturnPct: round(riskStats.totalReturnPct),
     maxDrawdownPct: round(result.maxDrawdown),
@@ -402,6 +430,7 @@ const summarizeError = ({ combo, initialCapital, riskPercent, allowShort, error 
   initialCapital,
   riskPercent,
   allowShort,
+  maxUnits: combo.maxUnits,
   finalEquity: '',
   totalReturnPct: '',
   maxDrawdownPct: '',
@@ -455,6 +484,7 @@ const runCombo = async ({ combo, initialCapital, riskPercent, allowShort }) => {
     initialCapital,
     riskPercent,
     allowShort,
+    maxUnits: combo.maxUnits,
   });
 
   return summarizeResult({
@@ -479,7 +509,7 @@ const main = async () => {
 
   if (options.dryRun) {
     combinations.forEach((combo, index) => {
-      console.log(`${index + 1}. ${combo.symbol} ${combo.from} to ${combo.to}`);
+      console.log(`${index + 1}. ${combo.symbol} ${combo.from} to ${combo.to} maxUnits=${combo.maxUnits}`);
     });
     console.log(`Planned ${combinations.length} combinations.`);
     return;
@@ -487,7 +517,7 @@ const main = async () => {
 
   const rows = [];
   for (const [index, combo] of combinations.entries()) {
-    const label = `${combo.symbol} ${combo.from} to ${combo.to}`;
+    const label = `${combo.symbol} ${combo.from} to ${combo.to} maxUnits=${combo.maxUnits}`;
     process.stdout.write(`[${index + 1}/${combinations.length}] ${label} ... `);
 
     try {
