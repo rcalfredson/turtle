@@ -33,6 +33,8 @@ const csvColumns = [
   'initialCapital',
   'riskPercent',
   'allowShort',
+  'entryPeriod',
+  'exitPeriod',
   'maxUnits',
   'finalEquity',
   'totalReturnPct',
@@ -86,6 +88,8 @@ Options:
   --initialCapital=100000        Starting capital
   --riskPercent=1                Risk percent per trade
   --allowShort=true              Enable short entries (true or false)
+  --entryPeriod=20               Entry channel period; comma-separated values run a sweep
+  --exitPeriod=10                Exit channel period; comma-separated values run a sweep
   --maxUnits=4                   Max position units; comma-separated values run a sweep
   --limit=5                      Run only the first N combinations
   --dry-run                      Print planned combinations without fetching data
@@ -104,6 +108,8 @@ const parseArgs = (argv) => {
     initialCapital: Number(process.env.STARTING_CAPITAL) || 100000,
     riskPercent: Number(process.env.RISK_PERCENT) || 1,
     allowShort: process.env.ALLOW_SHORT === undefined ? true : parseBoolean(process.env.ALLOW_SHORT, 'ALLOW_SHORT'),
+    entryPeriod: parsePositiveIntegerList(process.env.ENTRY_PERIOD || '20', 'ENTRY_PERIOD'),
+    exitPeriod: parsePositiveIntegerList(process.env.EXIT_PERIOD || '10', 'EXIT_PERIOD'),
     maxUnits: parsePositiveIntegerList(process.env.MAX_UNITS || '4', 'MAX_UNITS'),
     limit: null,
     output: null,
@@ -146,6 +152,10 @@ const parseArgs = (argv) => {
       options.riskPercent = Number(value);
     } else if (key === '--allowShort') {
       options.allowShort = parseBoolean(value, 'allowShort');
+    } else if (key === '--entryPeriod') {
+      options.entryPeriod = parsePositiveIntegerList(value, 'entryPeriod');
+    } else if (key === '--exitPeriod') {
+      options.exitPeriod = parsePositiveIntegerList(value, 'exitPeriod');
     } else if (key === '--maxUnits') {
       options.maxUnits = parsePositiveIntegerList(value, 'maxUnits');
     } else if (key === '--limit') {
@@ -173,6 +183,14 @@ const parseArgs = (argv) => {
 
   if (!options.ranges.length) {
     throw new Error('At least one date range is required');
+  }
+
+  if (!options.entryPeriod.length) {
+    throw new Error('At least one entryPeriod value is required');
+  }
+
+  if (!options.exitPeriod.length) {
+    throw new Error('At least one exitPeriod value is required');
   }
 
   if (!options.maxUnits.length) {
@@ -211,18 +229,42 @@ function parsePositiveIntegerList(value, label) {
   });
 }
 
-const buildCombinations = ({ symbols, ranges, maxUnits, limit }) => {
+const buildCombinations = ({ symbols, ranges, entryPeriod, exitPeriod, maxUnits, limit }) => {
   const combinations = [];
   symbols.forEach((symbol) => {
     ranges.forEach((range) => {
-      maxUnits.forEach((units) => {
-        combinations.push({ symbol, ...range, maxUnits: units });
+      entryPeriod.forEach((entry) => {
+        exitPeriod.forEach((exit) => {
+          if (exit >= entry) {
+            return;
+          }
+
+          maxUnits.forEach((units) => {
+            combinations.push({
+              symbol,
+              ...range,
+              entryPeriod: entry,
+              exitPeriod: exit,
+              maxUnits: units,
+            });
+          });
+        });
       });
     });
   });
 
   return limit ? combinations.slice(0, limit) : combinations;
 };
+
+const formatComboLabel = (combo) => [
+  combo.symbol,
+  combo.from,
+  'to',
+  combo.to,
+  `entryPeriod=${combo.entryPeriod}`,
+  `exitPeriod=${combo.exitPeriod}`,
+  `maxUnits=${combo.maxUnits}`,
+].join(' ');
 
 const formatDateForFile = (date) => date.toISOString().replace(/[:.]/g, '-');
 
@@ -378,6 +420,8 @@ const summarizeResult = ({ combo, prices, result, initialCapital, riskPercent, a
     initialCapital,
     riskPercent,
     allowShort,
+    entryPeriod: combo.entryPeriod,
+    exitPeriod: combo.exitPeriod,
     maxUnits: combo.maxUnits,
     finalEquity: round(result.finalEquity),
     totalReturnPct: round(riskStats.totalReturnPct),
@@ -430,6 +474,8 @@ const summarizeError = ({ combo, initialCapital, riskPercent, allowShort, error 
   initialCapital,
   riskPercent,
   allowShort,
+  entryPeriod: combo.entryPeriod,
+  exitPeriod: combo.exitPeriod,
   maxUnits: combo.maxUnits,
   finalEquity: '',
   totalReturnPct: '',
@@ -484,6 +530,8 @@ const runCombo = async ({ combo, initialCapital, riskPercent, allowShort }) => {
     initialCapital,
     riskPercent,
     allowShort,
+    entryPeriod: combo.entryPeriod,
+    exitPeriod: combo.exitPeriod,
     maxUnits: combo.maxUnits,
   });
 
@@ -506,10 +554,13 @@ const main = async () => {
 
   const output = options.output || getDefaultOutputPath();
   const combinations = buildCombinations(options);
+  if (!combinations.length) {
+    throw new Error('No valid combinations; each exitPeriod must be less than entryPeriod');
+  }
 
   if (options.dryRun) {
     combinations.forEach((combo, index) => {
-      console.log(`${index + 1}. ${combo.symbol} ${combo.from} to ${combo.to} maxUnits=${combo.maxUnits}`);
+      console.log(`${index + 1}. ${formatComboLabel(combo)}`);
     });
     console.log(`Planned ${combinations.length} combinations.`);
     return;
@@ -517,7 +568,7 @@ const main = async () => {
 
   const rows = [];
   for (const [index, combo] of combinations.entries()) {
-    const label = `${combo.symbol} ${combo.from} to ${combo.to} maxUnits=${combo.maxUnits}`;
+    const label = formatComboLabel(combo);
     process.stdout.write(`[${index + 1}/${combinations.length}] ${label} ... `);
 
     try {
