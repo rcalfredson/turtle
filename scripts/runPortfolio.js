@@ -37,6 +37,7 @@ const csvColumns = [
   'maxUnits',
   'maxOpenPositions',
   'slippageBps',
+  'maxVolumeParticipationPct',
   'finalEquity',
   'totalReturnPct',
   'maxDrawdownPct',
@@ -65,6 +66,10 @@ const csvColumns = [
   'stopExits',
   'channelExits',
   'endOfDataExits',
+  'volumeConstrainedEntries',
+  'volumeConstrainedAdds',
+  'volumeConstrainedExits',
+  'skippedForLiquidity',
   'totalPnl',
   'error',
 ];
@@ -80,10 +85,16 @@ const tradeCsvColumns = [
   'unitNumber',
   'units',
   'shares',
+  'desiredShares',
   'entryDate',
   'entryPrice',
   'triggerPrice',
   'slippageBps',
+  'maxVolumeParticipationPct',
+  'volume',
+  'maxVolumeShares',
+  'volumeParticipationPct',
+  'volumeConstrained',
   'exitDate',
   'exitPrice',
   'cost',
@@ -100,6 +111,7 @@ const equityCsvColumns = [
   'from',
   'to',
   'slippageBps',
+  'maxVolumeParticipationPct',
   'date',
   'equity',
   'cash',
@@ -124,6 +136,7 @@ Options:
   --maxUnits=4                   Max units per symbol
   --maxOpenPositions=10          Max concurrent symbols
   --slippageBps=0                Fill slippage in bps; comma-separated values run a sweep
+  --maxVolumeParticipationPct=1  Max percent of daily volume per entry/add order; comma-separated values run a sweep
   --tradesOutput=PATH            Optional trade log CSV output path
   --equityOutput=PATH            Optional daily equity/exposure CSV output path
   --dry-run                      Print planned portfolio runs without fetching data
@@ -148,6 +161,10 @@ const parseArgs = (argv) => {
     maxUnits: Number(process.env.MAX_UNITS) || 4,
     maxOpenPositions: Number(process.env.MAX_OPEN_POSITIONS) || 10,
     slippageBps: parseNonNegativeNumberList(process.env.SLIPPAGE_BPS || '0', 'SLIPPAGE_BPS'),
+    maxVolumeParticipationPct: parseNonNegativeNumberList(
+      process.env.MAX_VOLUME_PARTICIPATION_PCT || '1',
+      'MAX_VOLUME_PARTICIPATION_PCT',
+    ),
     output: null,
     tradesOutput: null,
     equityOutput: null,
@@ -204,6 +221,8 @@ const parseArgs = (argv) => {
       options.maxOpenPositions = Number(value);
     } else if (key === '--slippageBps') {
       options.slippageBps = parseNonNegativeNumberList(value, 'slippageBps');
+    } else if (key === '--maxVolumeParticipationPct') {
+      options.maxVolumeParticipationPct = parseNonNegativeNumberList(value, 'maxVolumeParticipationPct');
     } else {
       throw new Error(`Unknown option: ${key}`);
     }
@@ -237,6 +256,10 @@ const parseArgs = (argv) => {
 
   if (!options.slippageBps.length) {
     throw new Error('At least one slippageBps value is required');
+  }
+
+  if (!options.maxVolumeParticipationPct.length) {
+    throw new Error('At least one maxVolumeParticipationPct value is required');
   }
 
   return options;
@@ -374,6 +397,7 @@ const summarizeResult = ({ range, symbols, options, result }) => {
     maxUnits: options.maxUnits,
     maxOpenPositions: options.maxOpenPositions,
     slippageBps: options.slippageBps,
+    maxVolumeParticipationPct: options.maxVolumeParticipationPct,
     finalEquity: round(result.finalEquity),
     totalReturnPct: round(totalReturn),
     maxDrawdownPct: round(result.maxDrawdown),
@@ -402,6 +426,10 @@ const summarizeResult = ({ range, symbols, options, result }) => {
     stopExits: exits.filter((trade) => trade.reason === 'stop').length,
     channelExits: exits.filter((trade) => trade.reason === 'channel').length,
     endOfDataExits: exits.filter((trade) => trade.reason === 'end-of-data').length,
+    volumeConstrainedEntries: result.liquidity.volumeConstrainedEntries,
+    volumeConstrainedAdds: result.liquidity.volumeConstrainedAdds,
+    volumeConstrainedExits: result.liquidity.volumeConstrainedExits,
+    skippedForLiquidity: result.liquidity.skippedForLiquidity,
     totalPnl: round(totalPnl),
     error: '',
   };
@@ -421,6 +449,7 @@ const summarizeError = ({ range, symbols, options, error }) => ({
   maxUnits: options.maxUnits,
   maxOpenPositions: options.maxOpenPositions,
   slippageBps: options.slippageBps,
+  maxVolumeParticipationPct: options.maxVolumeParticipationPct,
   finalEquity: '',
   totalReturnPct: '',
   maxDrawdownPct: '',
@@ -449,6 +478,10 @@ const summarizeError = ({ range, symbols, options, error }) => ({
   stopExits: '',
   channelExits: '',
   endOfDataExits: '',
+  volumeConstrainedEntries: '',
+  volumeConstrainedAdds: '',
+  volumeConstrainedExits: '',
+  skippedForLiquidity: '',
   totalPnl: '',
   error: error.message,
 });
@@ -491,10 +524,16 @@ const buildTradeRows = ({ range, options, trades }) => trades.map((trade) => ({
   unitNumber: trade.unitNumber || '',
   units: trade.units || '',
   shares: trade.shares,
+  desiredShares: trade.desiredShares || trade.shares,
   entryDate: trade.entryDate || '',
   entryPrice: round(trade.entryPrice),
   triggerPrice: round(trade.triggerPrice),
   slippageBps: trade.slippageBps ?? options.slippageBps,
+  maxVolumeParticipationPct: options.maxVolumeParticipationPct,
+  volume: trade.volume,
+  maxVolumeShares: Number.isFinite(trade.maxVolumeShares) ? trade.maxVolumeShares : '',
+  volumeParticipationPct: round(trade.volumeParticipationPct),
+  volumeConstrained: trade.volumeConstrained || false,
   exitDate: trade.exitDate || '',
   exitPrice: round(trade.exitPrice),
   cost: round(trade.cost),
@@ -513,6 +552,7 @@ const buildEquityRows = ({ range, options, result }) => result.equityCurve.map((
     from: range.from,
     to: range.to,
     slippageBps: options.slippageBps,
+    maxVolumeParticipationPct: options.maxVolumeParticipationPct,
     date: point.date,
     equity: round(point.equity),
     cash: round(point.cash),
@@ -550,11 +590,13 @@ const main = async () => {
     let index = 1;
     options.ranges.forEach((range) => {
       options.slippageBps.forEach((slippageBps) => {
-        console.log(`${index}. ${range.from} to ${range.to} symbols=${options.symbols.length} slippageBps=${slippageBps}`);
-        index += 1;
+        options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
+          console.log(`${index}. ${range.from} to ${range.to} symbols=${options.symbols.length} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct}`);
+          index += 1;
+        });
       });
     });
-    console.log(`Planned ${options.ranges.length * options.slippageBps.length} portfolio runs.`);
+    console.log(`Planned ${options.ranges.length * options.slippageBps.length * options.maxVolumeParticipationPct.length} portfolio runs.`);
     return;
   }
 
@@ -564,17 +606,20 @@ const main = async () => {
   const combinations = [];
   options.ranges.forEach((range) => {
     options.slippageBps.forEach((slippageBps) => {
-      combinations.push({ range, slippageBps });
+      options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
+        combinations.push({ range, slippageBps, maxVolumeParticipationPct });
+      });
     });
   });
 
   for (const [index, combo] of combinations.entries()) {
-    const { range, slippageBps } = combo;
+    const { range, slippageBps, maxVolumeParticipationPct } = combo;
     const runOptions = {
       ...options,
       slippageBps,
+      maxVolumeParticipationPct,
     };
-    const label = `${range.from} to ${range.to} symbols=${options.symbols.length} slippageBps=${slippageBps}`;
+    const label = `${range.from} to ${range.to} symbols=${options.symbols.length} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct}`;
     process.stdout.write(`[${index + 1}/${combinations.length}] ${label} ... `);
 
     try {
@@ -593,6 +638,7 @@ const main = async () => {
         maxUnits: options.maxUnits,
         maxOpenPositions: options.maxOpenPositions,
         slippageBps,
+        maxVolumeParticipationPct,
       });
       rows.push(summarizeResult({
         range,
