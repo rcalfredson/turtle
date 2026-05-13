@@ -36,6 +36,7 @@ const csvColumns = [
   'atrPeriod',
   'maxUnits',
   'maxOpenPositions',
+  'slippageBps',
   'finalEquity',
   'totalReturnPct',
   'maxDrawdownPct',
@@ -81,6 +82,8 @@ const tradeCsvColumns = [
   'shares',
   'entryDate',
   'entryPrice',
+  'triggerPrice',
+  'slippageBps',
   'exitDate',
   'exitPrice',
   'cost',
@@ -96,6 +99,7 @@ const tradeCsvColumns = [
 const equityCsvColumns = [
   'from',
   'to',
+  'slippageBps',
   'date',
   'equity',
   'cash',
@@ -119,6 +123,7 @@ Options:
   --atrPeriod=20                 Turtle N period
   --maxUnits=4                   Max units per symbol
   --maxOpenPositions=10          Max concurrent symbols
+  --slippageBps=0                Fill slippage in bps; comma-separated values run a sweep
   --tradesOutput=PATH            Optional trade log CSV output path
   --equityOutput=PATH            Optional daily equity/exposure CSV output path
   --dry-run                      Print planned portfolio runs without fetching data
@@ -142,6 +147,7 @@ const parseArgs = (argv) => {
     atrPeriod: Number(process.env.ATR_PERIOD) || 20,
     maxUnits: Number(process.env.MAX_UNITS) || 4,
     maxOpenPositions: Number(process.env.MAX_OPEN_POSITIONS) || 10,
+    slippageBps: parseNonNegativeNumberList(process.env.SLIPPAGE_BPS || '0', 'SLIPPAGE_BPS'),
     output: null,
     tradesOutput: null,
     equityOutput: null,
@@ -196,6 +202,8 @@ const parseArgs = (argv) => {
       options.maxUnits = Number(value);
     } else if (key === '--maxOpenPositions') {
       options.maxOpenPositions = Number(value);
+    } else if (key === '--slippageBps') {
+      options.slippageBps = parseNonNegativeNumberList(value, 'slippageBps');
     } else {
       throw new Error(`Unknown option: ${key}`);
     }
@@ -227,8 +235,28 @@ const parseArgs = (argv) => {
     throw new Error('At least one date range is required');
   }
 
+  if (!options.slippageBps.length) {
+    throw new Error('At least one slippageBps value is required');
+  }
+
   return options;
 };
+
+function parseNonNegativeNumberList(value, label) {
+  const values = String(value).split(',').map((item) => item.trim()).filter(Boolean);
+  if (!values.length) {
+    throw new Error(`${label} must include at least one non-negative number`);
+  }
+
+  return values.map((item) => {
+    const parsed = Number(item);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      throw new Error(`${label} must include only non-negative numbers`);
+    }
+
+    return parsed;
+  });
+}
 
 const formatDateForFile = (date) => date.toISOString().replace(/[:.]/g, '-');
 
@@ -345,6 +373,7 @@ const summarizeResult = ({ range, symbols, options, result }) => {
     atrPeriod: options.atrPeriod,
     maxUnits: options.maxUnits,
     maxOpenPositions: options.maxOpenPositions,
+    slippageBps: options.slippageBps,
     finalEquity: round(result.finalEquity),
     totalReturnPct: round(totalReturn),
     maxDrawdownPct: round(result.maxDrawdown),
@@ -391,6 +420,7 @@ const summarizeError = ({ range, symbols, options, error }) => ({
   atrPeriod: options.atrPeriod,
   maxUnits: options.maxUnits,
   maxOpenPositions: options.maxOpenPositions,
+  slippageBps: options.slippageBps,
   finalEquity: '',
   totalReturnPct: '',
   maxDrawdownPct: '',
@@ -450,7 +480,7 @@ const rowsToCsv = ({ columns, rows }) => {
 
 const tradeDate = (trade) => trade.exitDate || trade.entryDate;
 
-const buildTradeRows = ({ range, trades }) => trades.map((trade) => ({
+const buildTradeRows = ({ range, options, trades }) => trades.map((trade) => ({
   from: range.from,
   to: range.to,
   date: tradeDate(trade),
@@ -463,6 +493,8 @@ const buildTradeRows = ({ range, trades }) => trades.map((trade) => ({
   shares: trade.shares,
   entryDate: trade.entryDate || '',
   entryPrice: round(trade.entryPrice),
+  triggerPrice: round(trade.triggerPrice),
+  slippageBps: trade.slippageBps ?? options.slippageBps,
   exitDate: trade.exitDate || '',
   exitPrice: round(trade.exitPrice),
   cost: round(trade.cost),
@@ -475,11 +507,12 @@ const buildTradeRows = ({ range, trades }) => trades.map((trade) => ({
   openPositionsAfter: trade.openPositionsAfter,
 }));
 
-const buildEquityRows = ({ range, result }) => result.equityCurve.map((point, index) => {
+const buildEquityRows = ({ range, options, result }) => result.equityCurve.map((point, index) => {
   const exposure = result.exposureCurve[index] || {};
   return {
     from: range.from,
     to: range.to,
+    slippageBps: options.slippageBps,
     date: point.date,
     equity: round(point.equity),
     cash: round(point.cash),
@@ -514,19 +547,35 @@ const main = async () => {
   }
 
   if (options.dryRun) {
-    options.ranges.forEach((range, index) => {
-      console.log(`${index + 1}. ${range.from} to ${range.to} symbols=${options.symbols.length}`);
+    let index = 1;
+    options.ranges.forEach((range) => {
+      options.slippageBps.forEach((slippageBps) => {
+        console.log(`${index}. ${range.from} to ${range.to} symbols=${options.symbols.length} slippageBps=${slippageBps}`);
+        index += 1;
+      });
     });
-    console.log(`Planned ${options.ranges.length} portfolio runs.`);
+    console.log(`Planned ${options.ranges.length * options.slippageBps.length} portfolio runs.`);
     return;
   }
 
   const rows = [];
   const tradeRows = [];
   const equityRows = [];
-  for (const [index, range] of options.ranges.entries()) {
-    const label = `${range.from} to ${range.to} symbols=${options.symbols.length}`;
-    process.stdout.write(`[${index + 1}/${options.ranges.length}] ${label} ... `);
+  const combinations = [];
+  options.ranges.forEach((range) => {
+    options.slippageBps.forEach((slippageBps) => {
+      combinations.push({ range, slippageBps });
+    });
+  });
+
+  for (const [index, combo] of combinations.entries()) {
+    const { range, slippageBps } = combo;
+    const runOptions = {
+      ...options,
+      slippageBps,
+    };
+    const label = `${range.from} to ${range.to} symbols=${options.symbols.length} slippageBps=${slippageBps}`;
+    process.stdout.write(`[${index + 1}/${combinations.length}] ${label} ... `);
 
     try {
       const priceBySymbol = await loadPriceBySymbol({
@@ -543,19 +592,22 @@ const main = async () => {
         atrPeriod: options.atrPeriod,
         maxUnits: options.maxUnits,
         maxOpenPositions: options.maxOpenPositions,
+        slippageBps,
       });
       rows.push(summarizeResult({
         range,
         symbols: options.symbols,
-        options,
+        options: runOptions,
         result,
       }));
       tradeRows.push(...buildTradeRows({
         range,
+        options: runOptions,
         trades: result.trades,
       }));
       equityRows.push(...buildEquityRows({
         range,
+        options: runOptions,
         result,
       }));
       process.stdout.write('ok\n');
@@ -563,7 +615,7 @@ const main = async () => {
       rows.push(summarizeError({
         range,
         symbols: options.symbols,
-        options,
+        options: runOptions,
         error,
       }));
       process.stdout.write(`error: ${error.message}\n`);
