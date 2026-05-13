@@ -38,6 +38,7 @@ const csvColumns = [
   'maxOpenPositions',
   'slippageBps',
   'maxVolumeParticipationPct',
+  'gapAwareFills',
   'finalEquity',
   'totalReturnPct',
   'maxDrawdownPct',
@@ -70,6 +71,10 @@ const csvColumns = [
   'volumeConstrainedAdds',
   'volumeConstrainedExits',
   'skippedForLiquidity',
+  'gapFilledEntries',
+  'gapFilledAdds',
+  'gapFilledStops',
+  'gapFilledChannelExits',
   'totalPnl',
   'error',
 ];
@@ -89,8 +94,11 @@ const tradeCsvColumns = [
   'entryDate',
   'entryPrice',
   'triggerPrice',
+  'fillBasePrice',
+  'gapFilled',
   'slippageBps',
   'maxVolumeParticipationPct',
+  'gapAwareFills',
   'volume',
   'maxVolumeShares',
   'volumeParticipationPct',
@@ -112,6 +120,7 @@ const equityCsvColumns = [
   'to',
   'slippageBps',
   'maxVolumeParticipationPct',
+  'gapAwareFills',
   'date',
   'equity',
   'cash',
@@ -137,6 +146,7 @@ Options:
   --maxOpenPositions=10          Max concurrent symbols
   --slippageBps=0                Fill slippage in bps; comma-separated values run a sweep
   --maxVolumeParticipationPct=1  Max percent of daily volume per entry/add order; comma-separated values run a sweep
+  --gapAwareFills=false          Use open price when it gaps beyond trigger; comma-separated booleans run a sweep
   --tradesOutput=PATH            Optional trade log CSV output path
   --equityOutput=PATH            Optional daily equity/exposure CSV output path
   --dry-run                      Print planned portfolio runs without fetching data
@@ -165,6 +175,7 @@ const parseArgs = (argv) => {
       process.env.MAX_VOLUME_PARTICIPATION_PCT || '1',
       'MAX_VOLUME_PARTICIPATION_PCT',
     ),
+    gapAwareFills: parseBooleanList(process.env.GAP_AWARE_FILLS || 'false', 'GAP_AWARE_FILLS'),
     output: null,
     tradesOutput: null,
     equityOutput: null,
@@ -223,6 +234,8 @@ const parseArgs = (argv) => {
       options.slippageBps = parseNonNegativeNumberList(value, 'slippageBps');
     } else if (key === '--maxVolumeParticipationPct') {
       options.maxVolumeParticipationPct = parseNonNegativeNumberList(value, 'maxVolumeParticipationPct');
+    } else if (key === '--gapAwareFills') {
+      options.gapAwareFills = parseBooleanList(value, 'gapAwareFills');
     } else {
       throw new Error(`Unknown option: ${key}`);
     }
@@ -262,6 +275,10 @@ const parseArgs = (argv) => {
     throw new Error('At least one maxVolumeParticipationPct value is required');
   }
 
+  if (!options.gapAwareFills.length) {
+    throw new Error('At least one gapAwareFills value is required');
+  }
+
   return options;
 };
 
@@ -278,6 +295,25 @@ function parseNonNegativeNumberList(value, label) {
     }
 
     return parsed;
+  });
+}
+
+function parseBooleanList(value, label) {
+  const values = String(value).split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
+  if (!values.length) {
+    throw new Error(`${label} must include at least one boolean`);
+  }
+
+  return values.map((item) => {
+    if (['true', '1', 'yes'].includes(item)) {
+      return true;
+    }
+
+    if (['false', '0', 'no'].includes(item)) {
+      return false;
+    }
+
+    throw new Error(`${label} must include only boolean values`);
   });
 }
 
@@ -398,6 +434,7 @@ const summarizeResult = ({ range, symbols, options, result }) => {
     maxOpenPositions: options.maxOpenPositions,
     slippageBps: options.slippageBps,
     maxVolumeParticipationPct: options.maxVolumeParticipationPct,
+    gapAwareFills: options.gapAwareFills,
     finalEquity: round(result.finalEquity),
     totalReturnPct: round(totalReturn),
     maxDrawdownPct: round(result.maxDrawdown),
@@ -430,6 +467,10 @@ const summarizeResult = ({ range, symbols, options, result }) => {
     volumeConstrainedAdds: result.liquidity.volumeConstrainedAdds,
     volumeConstrainedExits: result.liquidity.volumeConstrainedExits,
     skippedForLiquidity: result.liquidity.skippedForLiquidity,
+    gapFilledEntries: result.gapFills.gapFilledEntries,
+    gapFilledAdds: result.gapFills.gapFilledAdds,
+    gapFilledStops: result.gapFills.gapFilledStops,
+    gapFilledChannelExits: result.gapFills.gapFilledChannelExits,
     totalPnl: round(totalPnl),
     error: '',
   };
@@ -450,6 +491,7 @@ const summarizeError = ({ range, symbols, options, error }) => ({
   maxOpenPositions: options.maxOpenPositions,
   slippageBps: options.slippageBps,
   maxVolumeParticipationPct: options.maxVolumeParticipationPct,
+  gapAwareFills: options.gapAwareFills,
   finalEquity: '',
   totalReturnPct: '',
   maxDrawdownPct: '',
@@ -482,6 +524,10 @@ const summarizeError = ({ range, symbols, options, error }) => ({
   volumeConstrainedAdds: '',
   volumeConstrainedExits: '',
   skippedForLiquidity: '',
+  gapFilledEntries: '',
+  gapFilledAdds: '',
+  gapFilledStops: '',
+  gapFilledChannelExits: '',
   totalPnl: '',
   error: error.message,
 });
@@ -528,8 +574,11 @@ const buildTradeRows = ({ range, options, trades }) => trades.map((trade) => ({
   entryDate: trade.entryDate || '',
   entryPrice: round(trade.entryPrice),
   triggerPrice: round(trade.triggerPrice),
+  fillBasePrice: round(trade.fillBasePrice),
+  gapFilled: trade.gapFilled || false,
   slippageBps: trade.slippageBps ?? options.slippageBps,
   maxVolumeParticipationPct: options.maxVolumeParticipationPct,
+  gapAwareFills: options.gapAwareFills,
   volume: trade.volume,
   maxVolumeShares: Number.isFinite(trade.maxVolumeShares) ? trade.maxVolumeShares : '',
   volumeParticipationPct: round(trade.volumeParticipationPct),
@@ -553,6 +602,7 @@ const buildEquityRows = ({ range, options, result }) => result.equityCurve.map((
     to: range.to,
     slippageBps: options.slippageBps,
     maxVolumeParticipationPct: options.maxVolumeParticipationPct,
+    gapAwareFills: options.gapAwareFills,
     date: point.date,
     equity: round(point.equity),
     cash: round(point.cash),
@@ -591,12 +641,14 @@ const main = async () => {
     options.ranges.forEach((range) => {
       options.slippageBps.forEach((slippageBps) => {
         options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
-          console.log(`${index}. ${range.from} to ${range.to} symbols=${options.symbols.length} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct}`);
-          index += 1;
+          options.gapAwareFills.forEach((gapAwareFills) => {
+            console.log(`${index}. ${range.from} to ${range.to} symbols=${options.symbols.length} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills}`);
+            index += 1;
+          });
         });
       });
     });
-    console.log(`Planned ${options.ranges.length * options.slippageBps.length * options.maxVolumeParticipationPct.length} portfolio runs.`);
+    console.log(`Planned ${options.ranges.length * options.slippageBps.length * options.maxVolumeParticipationPct.length * options.gapAwareFills.length} portfolio runs.`);
     return;
   }
 
@@ -607,19 +659,32 @@ const main = async () => {
   options.ranges.forEach((range) => {
     options.slippageBps.forEach((slippageBps) => {
       options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
-        combinations.push({ range, slippageBps, maxVolumeParticipationPct });
+        options.gapAwareFills.forEach((gapAwareFills) => {
+          combinations.push({
+            range,
+            slippageBps,
+            maxVolumeParticipationPct,
+            gapAwareFills,
+          });
+        });
       });
     });
   });
 
   for (const [index, combo] of combinations.entries()) {
-    const { range, slippageBps, maxVolumeParticipationPct } = combo;
+    const {
+      range,
+      slippageBps,
+      maxVolumeParticipationPct,
+      gapAwareFills,
+    } = combo;
     const runOptions = {
       ...options,
       slippageBps,
       maxVolumeParticipationPct,
+      gapAwareFills,
     };
-    const label = `${range.from} to ${range.to} symbols=${options.symbols.length} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct}`;
+    const label = `${range.from} to ${range.to} symbols=${options.symbols.length} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills}`;
     process.stdout.write(`[${index + 1}/${combinations.length}] ${label} ... `);
 
     try {
@@ -639,6 +704,7 @@ const main = async () => {
         maxOpenPositions: options.maxOpenPositions,
         slippageBps,
         maxVolumeParticipationPct,
+        gapAwareFills,
       });
       rows.push(summarizeResult({
         range,

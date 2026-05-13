@@ -126,3 +126,62 @@ test('portfolio simulation caps entries by max volume participation', () => {
   assert.equal(result.liquidity.volumeConstrainedEntries, 1);
   assert.equal(result.liquidity.volumeConstrainedExits, 1);
 });
+
+test('portfolio simulation can fill long entries at the open after a gap above trigger', () => {
+  const prices = [
+    bar('2024-01-01', 10, 10, 9, 9.5),
+    bar('2024-01-02', 10, 10, 9, 9.5),
+    bar('2024-01-03', 11, 13, 10, 12.5),
+    bar('2024-01-04', 12.5, 13, 12, 12.5),
+  ];
+
+  const result = simulatePortfolioTrading({
+    priceBySymbol: { AAA: prices },
+    initialCapital: 10000,
+    riskPercent: 1,
+    entryPeriod: 2,
+    exitPeriod: 1,
+    atrPeriod: 2,
+    maxUnits: 1,
+    maxOpenPositions: 1,
+    gapAwareFills: true,
+    slippageBps: 100,
+  });
+  const entry = result.trades.find((trade) => trade.type === 'Entry');
+
+  assert.equal(entry.triggerPrice, 10);
+  assert.equal(entry.fillBasePrice, 11);
+  assert.equal(entry.gapFilled, true);
+  assert.equal(entry.entryPrice, 11.11);
+  assert.equal(result.gapFills.gapFilledEntries, 1);
+});
+
+test('portfolio simulation can fill long exits at the open after a gap below trigger', () => {
+  const prices = [
+    bar('2024-01-01', 10, 10, 9, 9.5),
+    bar('2024-01-02', 10, 10, 9, 9.5),
+    bar('2024-01-03', 11, 13, 10, 12.5),
+    bar('2024-01-04', 9, 9, 8, 8.5),
+  ];
+
+  const result = simulatePortfolioTrading({
+    priceBySymbol: { AAA: prices },
+    initialCapital: 10000,
+    riskPercent: 1,
+    entryPeriod: 2,
+    exitPeriod: 1,
+    atrPeriod: 2,
+    maxUnits: 1,
+    maxOpenPositions: 1,
+    gapAwareFills: true,
+    slippageBps: 100,
+  });
+  const exit = result.trades.find((trade) => trade.type === 'Exit');
+
+  assert.equal(exit.reason, 'channel');
+  assert.equal(exit.triggerPrice, 10);
+  assert.equal(exit.fillBasePrice, 9);
+  assert.equal(exit.gapFilled, true);
+  assert.equal(exit.exitPrice, 8.91);
+  assert.equal(result.gapFills.gapFilledChannelExits, 1);
+});
