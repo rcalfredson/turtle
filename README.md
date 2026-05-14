@@ -63,3 +63,9 @@ Supported values are `alphabetical`, `momentum63`, and `momentum126`:
 ```bash
 npm run portfolio -- --symbolsFile=universes/sp500-top100-established.txt --gapAwareFills=true --maxUnits=1 --slippageBps=5 --entryRank=alphabetical,momentum63,momentum126
 ```
+
+Risk sizing can be swept with comma-separated `--riskPercent` values:
+
+```bash
+npm run portfolio -- --symbolsFile=universes/sp500-top100-established.txt --gapAwareFills=true --maxUnits=1 --slippageBps=5 --entryRank=momentum126 --riskPercent=0.25,0.5,1
+```

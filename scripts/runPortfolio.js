@@ -86,6 +86,7 @@ const tradeCsvColumns = [
   'to',
   'date',
   'symbol',
+  'riskPercent',
   'entryPeriod',
   'exitPeriod',
   'maxUnits',
@@ -124,6 +125,7 @@ const tradeCsvColumns = [
 const equityCsvColumns = [
   'from',
   'to',
+  'riskPercent',
   'entryPeriod',
   'exitPeriod',
   'maxUnits',
@@ -149,7 +151,7 @@ Options:
   --symbolsFile=PATH             File containing symbols separated by commas, whitespace, or newlines
   --ranges=FROM:TO,FROM:TO       Comma-separated date ranges
   --initialCapital=100000        Starting capital
-  --riskPercent=1                Risk percent per unit
+  --riskPercent=1                Risk percent per unit; comma-separated values run a sweep
   --entryPeriod=20               Entry channel period; comma-separated values run a sweep
   --exitPeriod=10                Exit channel period; comma-separated values run a sweep
   --atrPeriod=20                 Turtle N period
@@ -177,7 +179,7 @@ const parseArgs = async (argv) => {
     symbolsFile: null,
     ranges: defaultRanges,
     initialCapital: Number(process.env.STARTING_CAPITAL) || 100000,
-    riskPercent: Number(process.env.RISK_PERCENT) || 1,
+    riskPercent: parsePositiveNumberList(process.env.RISK_PERCENT || '1', 'RISK_PERCENT'),
     allowShort: false,
     entryPeriod: parsePositiveIntegerList(process.env.ENTRY_PERIOD || '20', 'ENTRY_PERIOD'),
     exitPeriod: parsePositiveIntegerList(process.env.EXIT_PERIOD || '10', 'EXIT_PERIOD'),
@@ -236,7 +238,7 @@ const parseArgs = async (argv) => {
     } else if (key === '--initialCapital') {
       options.initialCapital = Number(value);
     } else if (key === '--riskPercent') {
-      options.riskPercent = Number(value);
+      options.riskPercent = parsePositiveNumberList(value, 'riskPercent');
     } else if (key === '--entryPeriod') {
       options.entryPeriod = parsePositiveIntegerList(value, 'entryPeriod');
     } else if (key === '--exitPeriod') {
@@ -268,8 +270,8 @@ const parseArgs = async (argv) => {
     throw new Error('initialCapital must be a positive number');
   }
 
-  if (!Number.isFinite(options.riskPercent) || options.riskPercent <= 0) {
-    throw new Error('riskPercent must be a positive number');
+  if (!options.riskPercent.length) {
+    throw new Error('At least one riskPercent value is required');
   }
 
   ['atrPeriod', 'maxOpenPositions'].forEach((key) => {
@@ -337,6 +339,22 @@ function parseNonNegativeNumberList(value, label) {
     const parsed = Number(item);
     if (!Number.isFinite(parsed) || parsed < 0) {
       throw new Error(`${label} must include only non-negative numbers`);
+    }
+
+    return parsed;
+  });
+}
+
+function parsePositiveNumberList(value, label) {
+  const values = String(value).split(',').map((item) => item.trim()).filter(Boolean);
+  if (!values.length) {
+    throw new Error(`${label} must include at least one positive number`);
+  }
+
+  return values.map((item) => {
+    const parsed = Number(item);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new Error(`${label} must include only positive numbers`);
     }
 
     return parsed;
@@ -643,6 +661,7 @@ const buildTradeRows = ({ range, options, trades }) => trades.map((trade) => ({
   to: range.to,
   date: tradeDate(trade),
   symbol: trade.symbol,
+  riskPercent: options.riskPercent,
   entryPeriod: options.entryPeriod,
   exitPeriod: options.exitPeriod,
   maxUnits: options.maxUnits,
@@ -683,6 +702,7 @@ const buildEquityRows = ({ range, options, result }) => result.equityCurve.map((
   return {
     from: range.from,
     to: range.to,
+    riskPercent: options.riskPercent,
     entryPeriod: options.entryPeriod,
     exitPeriod: options.exitPeriod,
     maxUnits: options.maxUnits,
@@ -726,19 +746,21 @@ const main = async () => {
   if (options.dryRun) {
     let index = 1;
     options.ranges.forEach((range) => {
-      options.entryPeriod.forEach((entryPeriod) => {
-        options.exitPeriod.forEach((exitPeriod) => {
-          if (exitPeriod >= entryPeriod) {
-            return;
-          }
+      options.riskPercent.forEach((riskPercent) => {
+        options.entryPeriod.forEach((entryPeriod) => {
+          options.exitPeriod.forEach((exitPeriod) => {
+            if (exitPeriod >= entryPeriod) {
+              return;
+            }
 
-          options.maxUnits.forEach((maxUnits) => {
-            options.entryRank.forEach((entryRank) => {
-              options.slippageBps.forEach((slippageBps) => {
-                options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
-                  options.gapAwareFills.forEach((gapAwareFills) => {
-                    console.log(`${index}. ${range.from} to ${range.to} symbols=${options.symbols.length} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills}`);
-                    index += 1;
+            options.maxUnits.forEach((maxUnits) => {
+              options.entryRank.forEach((entryRank) => {
+                options.slippageBps.forEach((slippageBps) => {
+                  options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
+                    options.gapAwareFills.forEach((gapAwareFills) => {
+                      console.log(`${index}. ${range.from} to ${range.to} symbols=${options.symbols.length} riskPercent=${riskPercent} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills}`);
+                      index += 1;
+                    });
                   });
                 });
               });
@@ -756,26 +778,29 @@ const main = async () => {
   const equityRows = [];
   const combinations = [];
   options.ranges.forEach((range) => {
-    options.entryPeriod.forEach((entryPeriod) => {
-      options.exitPeriod.forEach((exitPeriod) => {
-        if (exitPeriod >= entryPeriod) {
-          return;
-        }
+    options.riskPercent.forEach((riskPercent) => {
+      options.entryPeriod.forEach((entryPeriod) => {
+        options.exitPeriod.forEach((exitPeriod) => {
+          if (exitPeriod >= entryPeriod) {
+            return;
+          }
 
-        options.maxUnits.forEach((maxUnits) => {
-          options.entryRank.forEach((entryRank) => {
-            options.slippageBps.forEach((slippageBps) => {
-              options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
-                options.gapAwareFills.forEach((gapAwareFills) => {
-                  combinations.push({
-                    range,
-                    entryPeriod,
-                    exitPeriod,
-                    maxUnits,
-                    entryRank,
-                    slippageBps,
-                    maxVolumeParticipationPct,
-                    gapAwareFills,
+          options.maxUnits.forEach((maxUnits) => {
+            options.entryRank.forEach((entryRank) => {
+              options.slippageBps.forEach((slippageBps) => {
+                options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
+                  options.gapAwareFills.forEach((gapAwareFills) => {
+                    combinations.push({
+                      range,
+                      riskPercent,
+                      entryPeriod,
+                      exitPeriod,
+                      maxUnits,
+                      entryRank,
+                      slippageBps,
+                      maxVolumeParticipationPct,
+                      gapAwareFills,
+                    });
                   });
                 });
               });
@@ -789,6 +814,7 @@ const main = async () => {
   for (const [index, combo] of combinations.entries()) {
     const {
       range,
+      riskPercent,
       entryPeriod,
       exitPeriod,
       maxUnits,
@@ -799,6 +825,7 @@ const main = async () => {
     } = combo;
     const runOptions = {
       ...options,
+      riskPercent,
       entryPeriod,
       exitPeriod,
       maxUnits,
@@ -807,7 +834,7 @@ const main = async () => {
       maxVolumeParticipationPct,
       gapAwareFills,
     };
-    const label = `${range.from} to ${range.to} symbols=${options.symbols.length} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills}`;
+    const label = `${range.from} to ${range.to} symbols=${options.symbols.length} riskPercent=${riskPercent} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills}`;
     process.stdout.write(`[${index + 1}/${combinations.length}] ${label} ... `);
 
     try {
@@ -818,7 +845,7 @@ const main = async () => {
       const result = portfolioStrategy.simulatePortfolioTrading({
         priceBySymbol,
         initialCapital: options.initialCapital,
-        riskPercent: options.riskPercent,
+        riskPercent,
         allowShort: options.allowShort,
         entryPeriod,
         exitPeriod,
