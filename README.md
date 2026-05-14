@@ -69,3 +69,9 @@ Risk sizing can be swept with comma-separated `--riskPercent` values:
 ```bash
 npm run portfolio -- --symbolsFile=universes/sp500-top100-established.txt --gapAwareFills=true --maxUnits=1 --slippageBps=5 --entryRank=momentum126 --riskPercent=0.25,0.5,1
 ```
+
+Concurrent position limits can be swept with comma-separated `--maxOpenPositions` values:
+
+```bash
+npm run portfolio -- --symbolsFile=universes/sp500-top100-established.txt --gapAwareFills=true --maxUnits=1 --slippageBps=5 --entryRank=momentum126 --riskPercent=0.25 --maxOpenPositions=10,20,30
+```
