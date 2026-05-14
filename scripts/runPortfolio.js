@@ -37,6 +37,7 @@ const csvColumns = [
   'atrPeriod',
   'maxUnits',
   'maxOpenPositions',
+  'entryRank',
   'slippageBps',
   'maxVolumeParticipationPct',
   'gapAwareFills',
@@ -88,6 +89,7 @@ const tradeCsvColumns = [
   'entryPeriod',
   'exitPeriod',
   'maxUnits',
+  'entryRank',
   'type',
   'reason',
   'direction',
@@ -125,6 +127,7 @@ const equityCsvColumns = [
   'entryPeriod',
   'exitPeriod',
   'maxUnits',
+  'entryRank',
   'slippageBps',
   'maxVolumeParticipationPct',
   'gapAwareFills',
@@ -152,6 +155,7 @@ Options:
   --atrPeriod=20                 Turtle N period
   --maxUnits=4                   Max units per symbol; comma-separated values run a sweep
   --maxOpenPositions=10          Max concurrent symbols
+  --entryRank=alphabetical       Entry ordering; comma-separated values run a sweep. Options: alphabetical,momentum63,momentum126
   --slippageBps=0                Fill slippage in bps; comma-separated values run a sweep
   --maxVolumeParticipationPct=1  Max percent of daily volume per entry/add order; comma-separated values run a sweep
   --gapAwareFills=false          Use open price when it gaps beyond trigger; comma-separated booleans run a sweep
@@ -180,6 +184,7 @@ const parseArgs = async (argv) => {
     atrPeriod: Number(process.env.ATR_PERIOD) || 20,
     maxUnits: parsePositiveIntegerList(process.env.MAX_UNITS || '4', 'MAX_UNITS'),
     maxOpenPositions: Number(process.env.MAX_OPEN_POSITIONS) || 10,
+    entryRank: parseEntryRankList(process.env.ENTRY_RANK || 'alphabetical'),
     slippageBps: parseNonNegativeNumberList(process.env.SLIPPAGE_BPS || '0', 'SLIPPAGE_BPS'),
     maxVolumeParticipationPct: parseNonNegativeNumberList(
       process.env.MAX_VOLUME_PARTICIPATION_PCT || '1',
@@ -242,6 +247,8 @@ const parseArgs = async (argv) => {
       options.maxUnits = parsePositiveIntegerList(value, 'maxUnits');
     } else if (key === '--maxOpenPositions') {
       options.maxOpenPositions = Number(value);
+    } else if (key === '--entryRank') {
+      options.entryRank = parseEntryRankList(value);
     } else if (key === '--slippageBps') {
       options.slippageBps = parseNonNegativeNumberList(value, 'slippageBps');
     } else if (key === '--maxVolumeParticipationPct') {
@@ -281,6 +288,10 @@ const parseArgs = async (argv) => {
 
   if (!options.maxUnits.length) {
     throw new Error('At least one maxUnits value is required');
+  }
+
+  if (!options.entryRank.length) {
+    throw new Error('At least one entryRank value is required');
   }
 
   if (!hasValidChannelPair(options)) {
@@ -364,6 +375,22 @@ function parseBooleanList(value, label) {
     }
 
     throw new Error(`${label} must include only boolean values`);
+  });
+}
+
+function parseEntryRankList(value) {
+  const validRanks = ['alphabetical', 'momentum63', 'momentum126'];
+  const values = String(value).split(',').map((item) => item.trim()).filter(Boolean);
+  if (!values.length) {
+    throw new Error('entryRank must include at least one value');
+  }
+
+  return values.map((item) => {
+    if (!validRanks.includes(item)) {
+      throw new Error(`entryRank must include only: ${validRanks.join(', ')}`);
+    }
+
+    return item;
   });
 }
 
@@ -482,6 +509,7 @@ const summarizeResult = ({ range, symbols, options, result }) => {
     atrPeriod: options.atrPeriod,
     maxUnits: options.maxUnits,
     maxOpenPositions: options.maxOpenPositions,
+    entryRank: options.entryRank,
     slippageBps: options.slippageBps,
     maxVolumeParticipationPct: options.maxVolumeParticipationPct,
     gapAwareFills: options.gapAwareFills,
@@ -539,6 +567,7 @@ const summarizeError = ({ range, symbols, options, error }) => ({
   atrPeriod: options.atrPeriod,
   maxUnits: options.maxUnits,
   maxOpenPositions: options.maxOpenPositions,
+  entryRank: options.entryRank,
   slippageBps: options.slippageBps,
   maxVolumeParticipationPct: options.maxVolumeParticipationPct,
   gapAwareFills: options.gapAwareFills,
@@ -617,6 +646,7 @@ const buildTradeRows = ({ range, options, trades }) => trades.map((trade) => ({
   entryPeriod: options.entryPeriod,
   exitPeriod: options.exitPeriod,
   maxUnits: options.maxUnits,
+  entryRank: options.entryRank,
   type: trade.type,
   reason: trade.reason || '',
   direction: trade.direction,
@@ -656,6 +686,7 @@ const buildEquityRows = ({ range, options, result }) => result.equityCurve.map((
     entryPeriod: options.entryPeriod,
     exitPeriod: options.exitPeriod,
     maxUnits: options.maxUnits,
+    entryRank: options.entryRank,
     slippageBps: options.slippageBps,
     maxVolumeParticipationPct: options.maxVolumeParticipationPct,
     gapAwareFills: options.gapAwareFills,
@@ -702,11 +733,13 @@ const main = async () => {
           }
 
           options.maxUnits.forEach((maxUnits) => {
-            options.slippageBps.forEach((slippageBps) => {
-              options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
-                options.gapAwareFills.forEach((gapAwareFills) => {
-                  console.log(`${index}. ${range.from} to ${range.to} symbols=${options.symbols.length} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills}`);
-                  index += 1;
+            options.entryRank.forEach((entryRank) => {
+              options.slippageBps.forEach((slippageBps) => {
+                options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
+                  options.gapAwareFills.forEach((gapAwareFills) => {
+                    console.log(`${index}. ${range.from} to ${range.to} symbols=${options.symbols.length} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills}`);
+                    index += 1;
+                  });
                 });
               });
             });
@@ -730,17 +763,20 @@ const main = async () => {
         }
 
         options.maxUnits.forEach((maxUnits) => {
-          options.slippageBps.forEach((slippageBps) => {
-            options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
-              options.gapAwareFills.forEach((gapAwareFills) => {
-                combinations.push({
-                  range,
-                  entryPeriod,
-                  exitPeriod,
-                  maxUnits,
-                  slippageBps,
-                  maxVolumeParticipationPct,
-                  gapAwareFills,
+          options.entryRank.forEach((entryRank) => {
+            options.slippageBps.forEach((slippageBps) => {
+              options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
+                options.gapAwareFills.forEach((gapAwareFills) => {
+                  combinations.push({
+                    range,
+                    entryPeriod,
+                    exitPeriod,
+                    maxUnits,
+                    entryRank,
+                    slippageBps,
+                    maxVolumeParticipationPct,
+                    gapAwareFills,
+                  });
                 });
               });
             });
@@ -756,6 +792,7 @@ const main = async () => {
       entryPeriod,
       exitPeriod,
       maxUnits,
+      entryRank,
       slippageBps,
       maxVolumeParticipationPct,
       gapAwareFills,
@@ -765,11 +802,12 @@ const main = async () => {
       entryPeriod,
       exitPeriod,
       maxUnits,
+      entryRank,
       slippageBps,
       maxVolumeParticipationPct,
       gapAwareFills,
     };
-    const label = `${range.from} to ${range.to} symbols=${options.symbols.length} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills}`;
+    const label = `${range.from} to ${range.to} symbols=${options.symbols.length} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills}`;
     process.stdout.write(`[${index + 1}/${combinations.length}] ${label} ... `);
 
     try {
@@ -787,6 +825,7 @@ const main = async () => {
         atrPeriod: options.atrPeriod,
         maxUnits,
         maxOpenPositions: options.maxOpenPositions,
+        entryRank,
         slippageBps,
         maxVolumeParticipationPct,
         gapAwareFills,

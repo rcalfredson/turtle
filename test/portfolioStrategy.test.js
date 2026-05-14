@@ -41,6 +41,44 @@ test('portfolio simulation shares capital across symbols and respects maxOpenPos
   assert.equal(result.trades.find((trade) => trade.type === 'Entry').symbol, 'AAA');
 });
 
+test('portfolio simulation can rank same-day entries by prior momentum', () => {
+  const makePrices = ({ start, step }) => {
+    const prices = [];
+    const date = (index) => {
+      const value = new Date('2024-01-01T00:00:00Z');
+      value.setUTCDate(value.getUTCDate() + index);
+      return value.toISOString().slice(0, 10);
+    };
+
+    for (let index = 0; index < 65; index += 1) {
+      const close = start + (step * index);
+      prices.push(bar(date(index), close, close, close - 1, close));
+    }
+    prices.push(bar(date(65), start + (step * 65), 20, start + (step * 65) - 1, 19));
+    prices.push(bar(date(66), 19, 19, 18, 18.5));
+    return prices;
+  };
+
+  const result = simulatePortfolioTrading({
+    priceBySymbol: {
+      AAA: makePrices({ start: 10, step: 0 }),
+      BBB: makePrices({ start: 5, step: 0.1 }),
+    },
+    initialCapital: 10000,
+    riskPercent: 1,
+    entryPeriod: 2,
+    exitPeriod: 1,
+    atrPeriod: 2,
+    maxUnits: 1,
+    maxOpenPositions: 1,
+    entryRank: 'momentum63',
+  });
+
+  assert.equal(result.entries, 1);
+  assert.equal(result.trades.find((trade) => trade.type === 'Entry').symbol, 'BBB');
+  assert.equal(result.parameters.entryRank, 'momentum63');
+});
+
 test('portfolio simulation closes open positions at end of data', () => {
   const result = simulatePortfolioTrading({
     priceBySymbol: {
