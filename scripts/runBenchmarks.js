@@ -7,6 +7,7 @@ const dotenv = require('dotenv');
 
 const benchmarkStrategy = require('../lib/benchmarkStrategy');
 const dataProvider = require('../lib/dataProvider');
+const { loadSymbolsFile, parseSymbols } = require('../lib/symbols');
 
 dotenv.config();
 
@@ -68,6 +69,7 @@ Options:
   --output=PATH                  CSV output path
   --equityOutput=PATH            Optional daily benchmark equity CSV output path
   --symbols=AAPL,MSFT,SPY        Comma-separated same-universe symbols
+  --symbolsFile=PATH             File containing same-universe symbols separated by commas, whitespace, or newlines
   --benchmarkSymbols=SPY,QQQ     Comma-separated ETF/single-symbol benchmarks
   --ranges=FROM:TO,FROM:TO       Comma-separated date ranges
   --initialCapital=100000        Starting capital
@@ -77,12 +79,14 @@ Options:
 Examples:
   node scripts/runBenchmarks.js --dry-run
   node scripts/runBenchmarks.js --benchmarkSymbols=SPY,QQQ,IWM,DIA
+  node scripts/runBenchmarks.js --symbolsFile=universes/sector-etfs.txt --benchmarkSymbols=SPY,QQQ,IWM,DIA
 `);
 };
 
-const parseArgs = (argv) => {
+const parseArgs = async (argv) => {
   const options = {
     symbols: defaultSymbols,
+    symbolsFile: null,
     benchmarkSymbols: defaultBenchmarkSymbols,
     ranges: defaultRanges,
     initialCapital: Number(process.env.STARTING_CAPITAL) || 100000,
@@ -114,6 +118,8 @@ const parseArgs = (argv) => {
       options.equityOutput = value;
     } else if (key === '--symbols') {
       options.symbols = parseSymbols(value);
+    } else if (key === '--symbolsFile') {
+      options.symbolsFile = value;
     } else if (key === '--benchmarkSymbols') {
       options.benchmarkSymbols = parseSymbols(value);
     } else if (key === '--ranges') {
@@ -124,6 +130,10 @@ const parseArgs = (argv) => {
       throw new Error(`Unknown option: ${key}`);
     }
   });
+
+  if (options.symbolsFile && !options.help) {
+    options.symbols = await loadSymbolsFile(options.symbolsFile);
+  }
 
   if (!Number.isFinite(options.initialCapital) || options.initialCapital <= 0) {
     throw new Error('initialCapital must be a positive number');
@@ -143,8 +153,6 @@ const parseArgs = (argv) => {
 
   return options;
 };
-
-const parseSymbols = (value) => value.split(',').map((symbol) => symbol.trim().toUpperCase()).filter(Boolean);
 
 const parseRanges = (value) => value.split(',').map((range) => {
   const [from, to] = range.split(':');
@@ -335,7 +343,7 @@ const buildBenchmarkRuns = (options) => {
 };
 
 const main = async () => {
-  const options = parseArgs(process.argv.slice(2));
+  const options = await parseArgs(process.argv.slice(2));
   if (options.help) {
     printUsage();
     return;

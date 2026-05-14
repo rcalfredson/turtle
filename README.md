@@ -46,3 +46,13 @@ npm run matrix -- --dry-run
 npm run matrix -- --limit=3
 npm run matrix -- --symbols=AAPL,SPY --ranges=2020-01-01:2024-12-31
 ```
+
+## Universe files
+
+Portfolio and benchmark runners can load symbols from a text file with `--symbolsFile`.
+Files may use commas, spaces, or newlines, and `#` starts a comment:
+
+```bash
+npm run portfolio -- --symbolsFile=universes/sector-etfs.txt --gapAwareFills=true --maxUnits=1 --slippageBps=5
+npm run benchmarks -- --symbolsFile=universes/sector-etfs.txt --benchmarkSymbols=SPY,QQQ,IWM,DIA
+```

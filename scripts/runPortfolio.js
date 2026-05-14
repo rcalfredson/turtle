@@ -7,6 +7,7 @@ const dotenv = require('dotenv');
 
 const dataProvider = require('../lib/dataProvider');
 const portfolioStrategy = require('../lib/portfolioStrategy');
+const { loadSymbolsFile, parseSymbols } = require('../lib/symbols');
 
 dotenv.config();
 
@@ -142,6 +143,7 @@ Usage:
 Options:
   --output=PATH                  CSV output path
   --symbols=AAPL,MSFT,SPY        Comma-separated symbols
+  --symbolsFile=PATH             File containing symbols separated by commas, whitespace, or newlines
   --ranges=FROM:TO,FROM:TO       Comma-separated date ranges
   --initialCapital=100000        Starting capital
   --riskPercent=1                Risk percent per unit
@@ -161,12 +163,14 @@ Options:
 Examples:
   node scripts/runPortfolio.js --dry-run
   node scripts/runPortfolio.js --symbols=AAPL,MSFT,NVDA --ranges=2020-01-01:2024-12-31
+  node scripts/runPortfolio.js --symbolsFile=universes/sector-etfs.txt --gapAwareFills=true --maxUnits=1 --slippageBps=5
 `);
 };
 
-const parseArgs = (argv) => {
+const parseArgs = async (argv) => {
   const options = {
     symbols: defaultSymbols,
+    symbolsFile: null,
     ranges: defaultRanges,
     initialCapital: Number(process.env.STARTING_CAPITAL) || 100000,
     riskPercent: Number(process.env.RISK_PERCENT) || 1,
@@ -212,7 +216,9 @@ const parseArgs = (argv) => {
     } else if (key === '--equityOutput') {
       options.equityOutput = value;
     } else if (key === '--symbols') {
-      options.symbols = value.split(',').map((symbol) => symbol.trim().toUpperCase()).filter(Boolean);
+      options.symbols = parseSymbols(value);
+    } else if (key === '--symbolsFile') {
+      options.symbolsFile = value;
     } else if (key === '--ranges') {
       options.ranges = value.split(',').map((range) => {
         const [from, to] = range.split(':');
@@ -246,6 +252,10 @@ const parseArgs = (argv) => {
       throw new Error(`Unknown option: ${key}`);
     }
   });
+
+  if (options.symbolsFile && !options.help) {
+    options.symbols = await loadSymbolsFile(options.symbolsFile);
+  }
 
   if (!Number.isFinite(options.initialCapital) || options.initialCapital <= 0) {
     throw new Error('initialCapital must be a positive number');
@@ -676,7 +686,7 @@ const loadPriceBySymbol = async ({ symbols, range }) => {
 };
 
 const main = async () => {
-  const options = parseArgs(process.argv.slice(2));
+  const options = await parseArgs(process.argv.slice(2));
   if (options.help) {
     printUsage();
     return;

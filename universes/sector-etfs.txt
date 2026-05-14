@@ -1,0 +1,18 @@
+# Broad index ETFs
+SPY
+QQQ
+IWM
+DIA
+
+# State Street Select Sector SPDR ETFs
+XLB
+XLC
+XLE
+XLF
+XLI
+XLK
+XLP
+XLRE
+XLU
+XLV
+XLY
