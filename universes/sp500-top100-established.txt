@@ -1,0 +1,114 @@
+# Current large-cap stock universe for universe-realism testing.
+#
+# Source basis:
+# - StockTi S&P 500 constituents by market cap, updated 2026-05-13:
+#   https://stockti.com/stocks/sp500
+#
+# Construction:
+# - Start from the visible top 100 S&P 500 names by market cap.
+# - Use Yahoo Finance ticker syntax where needed, e.g. BRK-B.
+# - Exclude obvious too-new listings/spinoffs from this first pass because the
+#   benchmark runner currently starts equal-weight buy-and-hold on the first
+#   common date across all symbols.
+#
+# Caveat:
+# - This is still a current-membership, current-market-cap universe, so it has
+#   survivorship and lookback-selection bias. It is intended as a broader,
+#   more dynamic stock-universe test, not a final live-confidence test.
+
+NVDA
+GOOG
+GOOGL
+AAPL
+MSFT
+AMZN
+AVGO
+TSLA
+META
+WMT
+BRK-B
+LLY
+JPM
+XOM
+V
+MU
+AMD
+JNJ
+INTC
+ORCL
+COST
+MA
+CAT
+NFLX
+BAC
+CVX
+ABBV
+CSCO
+PG
+KO
+UNH
+HD
+LRCX
+AMAT
+MS
+GE
+MRK
+GS
+PM
+TXN
+WFC
+RTX
+LIN
+KLAC
+ANET
+C
+IBM
+AXP
+PEP
+TMUS
+MCD
+NEE
+VZ
+ADI
+DIS
+T
+BA
+APH
+AMGN
+TMO
+TJX
+BLK
+DELL
+ETN
+GILD
+ISRG
+UNP
+SCHW
+QCOM
+DE
+ABT
+BX
+UBER
+GLW
+PFE
+CRM
+COP
+PANW
+BKNG
+WDC
+HON
+SPGI
+LOW
+IBKR
+CB
+SYK
+DHR
+PH
+PGR
+BMY
+NEM
+COF
+LMT
+STX
+CRWD
+SBUX
