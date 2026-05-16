@@ -79,6 +79,43 @@ test('portfolio simulation can rank same-day entries by prior momentum', () => {
   assert.equal(result.parameters.entryRank, 'momentum63');
 });
 
+test('portfolio simulation can gate entries with a market regime filter', () => {
+  const result = simulatePortfolioTrading({
+    priceBySymbol: {
+      AAA: [
+        bar('2024-01-01', 10, 10, 9, 9.5),
+        bar('2024-01-02', 10, 10, 9, 9.5),
+        bar('2024-01-03', 10, 13, 10, 12.5),
+        bar('2024-01-04', 13, 15, 12, 14),
+      ],
+    },
+    marketRegimeSymbol: 'SPY',
+    marketRegimeMa: 2,
+    marketRegimePrices: [
+      bar('2024-01-01', 10, 10, 10, 10),
+      bar('2024-01-02', 8, 8, 8, 8),
+      bar('2024-01-03', 11, 11, 11, 11),
+      bar('2024-01-04', 12, 12, 12, 12),
+    ],
+    initialCapital: 10000,
+    riskPercent: 1,
+    entryPeriod: 2,
+    exitPeriod: 1,
+    atrPeriod: 2,
+    maxUnits: 1,
+    maxOpenPositions: 1,
+  });
+  const entry = result.trades.find((trade) => trade.type === 'Entry');
+
+  assert.equal(result.entries, 1);
+  assert.equal(entry.entryDate, '2024-01-04');
+  assert.equal(result.marketRegime.blockedEntries, 1);
+  assert.equal(result.marketRegime.activeDays, 1);
+  assert.equal(result.marketRegime.inactiveDays, 3);
+  assert.equal(result.parameters.marketRegimeSymbol, 'SPY');
+  assert.equal(result.parameters.marketRegimeMa, 2);
+});
+
 test('portfolio simulation closes open positions at end of data', () => {
   const result = simulatePortfolioTrading({
     priceBySymbol: {

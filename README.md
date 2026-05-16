@@ -75,3 +75,10 @@ Concurrent position limits can be swept with comma-separated `--maxOpenPositions
 ```bash
 npm run portfolio -- --symbolsFile=universes/sp500-top100-established.txt --gapAwareFills=true --maxUnits=1 --slippageBps=5 --entryRank=momentum126 --riskPercent=0.25 --maxOpenPositions=10,20,30
 ```
+
+Market regime filters can gate new entries and add-ons with a broad-market moving average.
+Use `--marketRegimeMa=0,200` to compare the unfiltered strategy with a prior-close `SPY` 200-day SMA filter:
+
+```bash
+npm run portfolio -- --symbolsFile=universes/sp500-top100-established.txt --gapAwareFills=true --slippageBps=5 --entryRank=momentum126 --riskPercent=0.25 --entryPeriod=55 --exitPeriod=50 --maxUnits=1,2,4 --marketRegimeSymbol=SPY --marketRegimeMa=0,200
+```

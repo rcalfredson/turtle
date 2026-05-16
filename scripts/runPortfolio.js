@@ -41,6 +41,11 @@ const csvColumns = [
   'slippageBps',
   'maxVolumeParticipationPct',
   'gapAwareFills',
+  'marketRegimeSymbol',
+  'marketRegimeMa',
+  'marketRegimeActiveDaysPct',
+  'marketRegimeBlockedEntries',
+  'marketRegimeBlockedAdds',
   'finalEquity',
   'totalReturnPct',
   'maxDrawdownPct',
@@ -106,6 +111,8 @@ const tradeCsvColumns = [
   'slippageBps',
   'maxVolumeParticipationPct',
   'gapAwareFills',
+  'marketRegimeSymbol',
+  'marketRegimeMa',
   'volume',
   'maxVolumeShares',
   'volumeParticipationPct',
@@ -133,6 +140,9 @@ const equityCsvColumns = [
   'slippageBps',
   'maxVolumeParticipationPct',
   'gapAwareFills',
+  'marketRegimeSymbol',
+  'marketRegimeMa',
+  'marketRegimeActive',
   'date',
   'equity',
   'cash',
@@ -161,6 +171,8 @@ Options:
   --slippageBps=0                Fill slippage in bps; comma-separated values run a sweep
   --maxVolumeParticipationPct=1  Max percent of daily volume per entry/add order; comma-separated values run a sweep
   --gapAwareFills=false          Use open price when it gaps beyond trigger; comma-separated booleans run a sweep
+  --marketRegimeSymbol=SPY       Optional market regime symbol used to gate entries/adds
+  --marketRegimeMa=0             Prior-close SMA period for market regime; 0 disables, comma-separated values run a sweep
   --tradesOutput=PATH            Optional trade log CSV output path
   --equityOutput=PATH            Optional daily equity/exposure CSV output path
   --dry-run                      Print planned portfolio runs without fetching data
@@ -193,6 +205,8 @@ const parseArgs = async (argv) => {
       'MAX_VOLUME_PARTICIPATION_PCT',
     ),
     gapAwareFills: parseBooleanList(process.env.GAP_AWARE_FILLS || 'false', 'GAP_AWARE_FILLS'),
+    marketRegimeSymbol: process.env.MARKET_REGIME_SYMBOL || '',
+    marketRegimeMa: parseNonNegativeIntegerList(process.env.MARKET_REGIME_MA || '0', 'MARKET_REGIME_MA'),
     output: null,
     tradesOutput: null,
     equityOutput: null,
@@ -257,6 +271,10 @@ const parseArgs = async (argv) => {
       options.maxVolumeParticipationPct = parseNonNegativeNumberList(value, 'maxVolumeParticipationPct');
     } else if (key === '--gapAwareFills') {
       options.gapAwareFills = parseBooleanList(value, 'gapAwareFills');
+    } else if (key === '--marketRegimeSymbol') {
+      options.marketRegimeSymbol = value.trim().toUpperCase();
+    } else if (key === '--marketRegimeMa') {
+      options.marketRegimeMa = parseNonNegativeIntegerList(value, 'marketRegimeMa');
     } else {
       throw new Error(`Unknown option: ${key}`);
     }
@@ -324,6 +342,14 @@ const parseArgs = async (argv) => {
     throw new Error('At least one gapAwareFills value is required');
   }
 
+  if (!options.marketRegimeMa.length) {
+    throw new Error('At least one marketRegimeMa value is required');
+  }
+
+  if (options.marketRegimeMa.some((ma) => ma > 0) && !options.marketRegimeSymbol) {
+    throw new Error('marketRegimeSymbol is required when marketRegimeMa is greater than 0');
+  }
+
   return options;
 };
 
@@ -375,6 +401,22 @@ function parsePositiveIntegerList(value, label) {
     const parsed = Number(item);
     if (!Number.isInteger(parsed) || parsed < 1) {
       throw new Error(`${label} must include only positive integers`);
+    }
+
+    return parsed;
+  });
+}
+
+function parseNonNegativeIntegerList(value, label) {
+  const values = String(value).split(',').map((item) => item.trim()).filter(Boolean);
+  if (!values.length) {
+    throw new Error(`${label} must include at least one non-negative integer`);
+  }
+
+  return values.map((item) => {
+    const parsed = Number(item);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      throw new Error(`${label} must include only non-negative integers`);
     }
 
     return parsed;
@@ -535,6 +577,11 @@ const summarizeResult = ({ range, symbols, options, result }) => {
     slippageBps: options.slippageBps,
     maxVolumeParticipationPct: options.maxVolumeParticipationPct,
     gapAwareFills: options.gapAwareFills,
+    marketRegimeSymbol: result.marketRegime.symbol,
+    marketRegimeMa: result.marketRegime.maPeriod,
+    marketRegimeActiveDaysPct: round(result.marketRegime.activeDaysPct),
+    marketRegimeBlockedEntries: result.marketRegime.blockedEntries,
+    marketRegimeBlockedAdds: result.marketRegime.blockedAdds,
     finalEquity: round(result.finalEquity),
     totalReturnPct: round(totalReturn),
     maxDrawdownPct: round(result.maxDrawdown),
@@ -593,6 +640,11 @@ const summarizeError = ({ range, symbols, options, error }) => ({
   slippageBps: options.slippageBps,
   maxVolumeParticipationPct: options.maxVolumeParticipationPct,
   gapAwareFills: options.gapAwareFills,
+  marketRegimeSymbol: options.marketRegimeMa > 0 ? options.marketRegimeSymbol : '',
+  marketRegimeMa: options.marketRegimeMa,
+  marketRegimeActiveDaysPct: '',
+  marketRegimeBlockedEntries: '',
+  marketRegimeBlockedAdds: '',
   finalEquity: '',
   totalReturnPct: '',
   maxDrawdownPct: '',
@@ -685,6 +737,8 @@ const buildTradeRows = ({ range, options, trades }) => trades.map((trade) => ({
   slippageBps: trade.slippageBps ?? options.slippageBps,
   maxVolumeParticipationPct: options.maxVolumeParticipationPct,
   gapAwareFills: options.gapAwareFills,
+  marketRegimeSymbol: options.marketRegimeMa > 0 ? options.marketRegimeSymbol : '',
+  marketRegimeMa: options.marketRegimeMa,
   volume: trade.volume,
   maxVolumeShares: Number.isFinite(trade.maxVolumeShares) ? trade.maxVolumeShares : '',
   volumeParticipationPct: round(trade.volumeParticipationPct),
@@ -703,6 +757,7 @@ const buildTradeRows = ({ range, options, trades }) => trades.map((trade) => ({
 
 const buildEquityRows = ({ range, options, result }) => result.equityCurve.map((point, index) => {
   const exposure = result.exposureCurve[index] || {};
+  const marketRegime = result.marketRegimeCurve[index] || {};
   return {
     from: range.from,
     to: range.to,
@@ -714,6 +769,9 @@ const buildEquityRows = ({ range, options, result }) => result.equityCurve.map((
     slippageBps: options.slippageBps,
     maxVolumeParticipationPct: options.maxVolumeParticipationPct,
     gapAwareFills: options.gapAwareFills,
+    marketRegimeSymbol: options.marketRegimeMa > 0 ? options.marketRegimeSymbol : '',
+    marketRegimeMa: options.marketRegimeMa,
+    marketRegimeActive: marketRegime.active ?? true,
     date: point.date,
     equity: round(point.equity),
     cash: round(point.cash),
@@ -740,6 +798,26 @@ const loadPriceBySymbol = async ({ symbols, range }) => {
   return Object.fromEntries(entries);
 };
 
+const subtractCalendarDays = (dateText, days) => {
+  const date = new Date(`${dateText}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+};
+
+const loadMarketRegimePrices = async ({ symbol, range, maPeriod }) => {
+  if (!symbol || maPeriod < 1) {
+    return null;
+  }
+
+  const warmupDays = Math.ceil(maPeriod * 2);
+  return dataProvider.getHistoricalPrices({
+    symbol,
+    from: subtractCalendarDays(range.from, warmupDays),
+    to: range.to,
+    interval: '1d',
+  });
+};
+
 const main = async () => {
   const options = await parseArgs(process.argv.slice(2));
   if (options.help) {
@@ -763,8 +841,10 @@ const main = async () => {
                   options.slippageBps.forEach((slippageBps) => {
                     options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
                       options.gapAwareFills.forEach((gapAwareFills) => {
-                        console.log(`${index}. ${range.from} to ${range.to} symbols=${options.symbols.length} riskPercent=${riskPercent} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} maxOpenPositions=${maxOpenPositions} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills}`);
-                        index += 1;
+                        options.marketRegimeMa.forEach((marketRegimeMa) => {
+                          console.log(`${index}. ${range.from} to ${range.to} symbols=${options.symbols.length} riskPercent=${riskPercent} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} maxOpenPositions=${maxOpenPositions} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills} marketRegimeSymbol=${marketRegimeMa > 0 ? options.marketRegimeSymbol : ''} marketRegimeMa=${marketRegimeMa}`);
+                          index += 1;
+                        });
                       });
                     });
                   });
@@ -797,17 +877,20 @@ const main = async () => {
                 options.slippageBps.forEach((slippageBps) => {
                   options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
                     options.gapAwareFills.forEach((gapAwareFills) => {
-                      combinations.push({
-                        range,
-                        riskPercent,
-                        entryPeriod,
-                        exitPeriod,
-                        maxUnits,
-                        maxOpenPositions,
-                        entryRank,
-                        slippageBps,
-                        maxVolumeParticipationPct,
-                        gapAwareFills,
+                      options.marketRegimeMa.forEach((marketRegimeMa) => {
+                        combinations.push({
+                          range,
+                          riskPercent,
+                          entryPeriod,
+                          exitPeriod,
+                          maxUnits,
+                          maxOpenPositions,
+                          entryRank,
+                          slippageBps,
+                          maxVolumeParticipationPct,
+                          gapAwareFills,
+                          marketRegimeMa,
+                        });
                       });
                     });
                   });
@@ -832,6 +915,7 @@ const main = async () => {
       slippageBps,
       maxVolumeParticipationPct,
       gapAwareFills,
+      marketRegimeMa,
     } = combo;
     const runOptions = {
       ...options,
@@ -844,14 +928,21 @@ const main = async () => {
       slippageBps,
       maxVolumeParticipationPct,
       gapAwareFills,
+      marketRegimeSymbol: marketRegimeMa > 0 ? options.marketRegimeSymbol : '',
+      marketRegimeMa,
     };
-    const label = `${range.from} to ${range.to} symbols=${options.symbols.length} riskPercent=${riskPercent} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} maxOpenPositions=${maxOpenPositions} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills}`;
+    const label = `${range.from} to ${range.to} symbols=${options.symbols.length} riskPercent=${riskPercent} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} maxOpenPositions=${maxOpenPositions} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills} marketRegimeSymbol=${marketRegimeMa > 0 ? options.marketRegimeSymbol : ''} marketRegimeMa=${marketRegimeMa}`;
     process.stdout.write(`[${index + 1}/${combinations.length}] ${label} ... `);
 
     try {
       const priceBySymbol = await loadPriceBySymbol({
         symbols: options.symbols,
         range,
+      });
+      const marketRegimePrices = await loadMarketRegimePrices({
+        symbol: options.marketRegimeSymbol,
+        range,
+        maPeriod: marketRegimeMa,
       });
       const result = portfolioStrategy.simulatePortfolioTrading({
         priceBySymbol,
@@ -867,6 +958,9 @@ const main = async () => {
         slippageBps,
         maxVolumeParticipationPct,
         gapAwareFills,
+        marketRegimeSymbol: marketRegimeMa > 0 ? options.marketRegimeSymbol : null,
+        marketRegimePrices,
+        marketRegimeMa,
       });
       rows.push(summarizeResult({
         range,
