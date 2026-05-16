@@ -8,7 +8,8 @@
     "test": "node --test",
     "matrix": "node scripts/runMatrix.js",
     "portfolio": "node scripts/runPortfolio.js",
-    "benchmarks": "node scripts/runBenchmarks.js"
+    "benchmarks": "node scripts/runBenchmarks.js",
+    "hybrid": "node scripts/runHybrid.js"
   },
   "repository": {
     "type": "git",

@@ -89,3 +89,10 @@ Use `--relativeStrengthLookback=0,126` to compare unfiltered entries with entrie
 ```bash
 npm run portfolio -- --symbolsFile=universes/sp500-top100-established.txt --gapAwareFills=true --slippageBps=5 --entryRank=momentum126 --riskPercent=0.25 --entryPeriod=55 --exitPeriod=50 --maxUnits=1,2,4 --relativeStrengthSymbol=SPY --relativeStrengthLookback=0,126
 ```
+
+Hybrid runs combine a passive buy-and-hold core with an active trend-following sleeve.
+Use `--activeAllocationPct` to sweep the active sleeve size; the remaining allocation goes to `--coreSymbol`:
+
+```bash
+npm run hybrid -- --symbolsFile=universes/sp500-top100-established.txt --coreSymbol=SPY --activeAllocationPct=20,30 --gapAwareFills=true --slippageBps=5 --entryRank=momentum126 --riskPercent=0.25 --entryPeriod=55 --exitPeriod=50 --maxUnits=1 --maxOpenPositions=10 --relativeStrengthSymbol=SPY --relativeStrengthLookback=63,84
+```
