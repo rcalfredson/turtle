@@ -82,3 +82,10 @@ Use `--marketRegimeMa=0,200` to compare the unfiltered strategy with a prior-clo
 ```bash
 npm run portfolio -- --symbolsFile=universes/sp500-top100-established.txt --gapAwareFills=true --slippageBps=5 --entryRank=momentum126 --riskPercent=0.25 --entryPeriod=55 --exitPeriod=50 --maxUnits=1,2,4 --marketRegimeSymbol=SPY --marketRegimeMa=0,200
 ```
+
+Relative-strength filters can require breakout candidates to outperform a benchmark over a prior return lookback.
+Use `--relativeStrengthLookback=0,126` to compare unfiltered entries with entries that have beaten `SPY` over the prior 126 trading days:
+
+```bash
+npm run portfolio -- --symbolsFile=universes/sp500-top100-established.txt --gapAwareFills=true --slippageBps=5 --entryRank=momentum126 --riskPercent=0.25 --entryPeriod=55 --exitPeriod=50 --maxUnits=1,2,4 --relativeStrengthSymbol=SPY --relativeStrengthLookback=0,126
+```

@@ -116,6 +116,42 @@ test('portfolio simulation can gate entries with a market regime filter', () => 
   assert.equal(result.parameters.marketRegimeMa, 2);
 });
 
+test('portfolio simulation can filter entries by relative strength versus a benchmark', () => {
+  const result = simulatePortfolioTrading({
+    priceBySymbol: {
+      AAA: [
+        bar('2024-01-01', 10, 10, 9, 10),
+        bar('2024-01-02', 10, 10, 9, 10),
+        bar('2024-01-03', 13, 13, 12, 13),
+        bar('2024-01-04', 14, 15, 13, 14),
+      ],
+    },
+    relativeStrengthSymbol: 'SPY',
+    relativeStrengthLookback: 2,
+    relativeStrengthPrices: [
+      bar('2024-01-01', 10, 10, 10, 10),
+      bar('2024-01-02', 12, 12, 12, 12),
+      bar('2024-01-03', 11, 11, 11, 11),
+      bar('2024-01-04', 12, 12, 12, 12),
+    ],
+    initialCapital: 10000,
+    riskPercent: 1,
+    entryPeriod: 2,
+    exitPeriod: 1,
+    atrPeriod: 2,
+    maxUnits: 1,
+    maxOpenPositions: 1,
+  });
+  const entry = result.trades.find((trade) => trade.type === 'Entry');
+
+  assert.equal(result.entries, 1);
+  assert.equal(entry.entryDate, '2024-01-04');
+  assert.equal(result.relativeStrength.blockedEntries, 1);
+  assert.equal(result.relativeStrength.missingBenchmarkDays, 1);
+  assert.equal(result.parameters.relativeStrengthSymbol, 'SPY');
+  assert.equal(result.parameters.relativeStrengthLookback, 2);
+});
+
 test('portfolio simulation closes open positions at end of data', () => {
   const result = simulatePortfolioTrading({
     priceBySymbol: {

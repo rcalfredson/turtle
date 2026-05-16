@@ -46,6 +46,11 @@ const csvColumns = [
   'marketRegimeActiveDaysPct',
   'marketRegimeBlockedEntries',
   'marketRegimeBlockedAdds',
+  'relativeStrengthSymbol',
+  'relativeStrengthLookback',
+  'relativeStrengthBlockedEntries',
+  'relativeStrengthMissingBenchmarkDays',
+  'relativeStrengthMissingSymbolMomentum',
   'finalEquity',
   'totalReturnPct',
   'maxDrawdownPct',
@@ -113,6 +118,8 @@ const tradeCsvColumns = [
   'gapAwareFills',
   'marketRegimeSymbol',
   'marketRegimeMa',
+  'relativeStrengthSymbol',
+  'relativeStrengthLookback',
   'volume',
   'maxVolumeShares',
   'volumeParticipationPct',
@@ -143,6 +150,8 @@ const equityCsvColumns = [
   'marketRegimeSymbol',
   'marketRegimeMa',
   'marketRegimeActive',
+  'relativeStrengthSymbol',
+  'relativeStrengthLookback',
   'date',
   'equity',
   'cash',
@@ -173,6 +182,8 @@ Options:
   --gapAwareFills=false          Use open price when it gaps beyond trigger; comma-separated booleans run a sweep
   --marketRegimeSymbol=SPY       Optional market regime symbol used to gate entries/adds
   --marketRegimeMa=0             Prior-close SMA period for market regime; 0 disables, comma-separated values run a sweep
+  --relativeStrengthSymbol=SPY   Optional benchmark symbol used to filter entries by relative strength
+  --relativeStrengthLookback=0   Prior-return lookback for relative strength; 0 disables, comma-separated values run a sweep
   --tradesOutput=PATH            Optional trade log CSV output path
   --equityOutput=PATH            Optional daily equity/exposure CSV output path
   --dry-run                      Print planned portfolio runs without fetching data
@@ -207,6 +218,11 @@ const parseArgs = async (argv) => {
     gapAwareFills: parseBooleanList(process.env.GAP_AWARE_FILLS || 'false', 'GAP_AWARE_FILLS'),
     marketRegimeSymbol: process.env.MARKET_REGIME_SYMBOL || '',
     marketRegimeMa: parseNonNegativeIntegerList(process.env.MARKET_REGIME_MA || '0', 'MARKET_REGIME_MA'),
+    relativeStrengthSymbol: process.env.RELATIVE_STRENGTH_SYMBOL || '',
+    relativeStrengthLookback: parseNonNegativeIntegerList(
+      process.env.RELATIVE_STRENGTH_LOOKBACK || '0',
+      'RELATIVE_STRENGTH_LOOKBACK',
+    ),
     output: null,
     tradesOutput: null,
     equityOutput: null,
@@ -275,6 +291,10 @@ const parseArgs = async (argv) => {
       options.marketRegimeSymbol = value.trim().toUpperCase();
     } else if (key === '--marketRegimeMa') {
       options.marketRegimeMa = parseNonNegativeIntegerList(value, 'marketRegimeMa');
+    } else if (key === '--relativeStrengthSymbol') {
+      options.relativeStrengthSymbol = value.trim().toUpperCase();
+    } else if (key === '--relativeStrengthLookback') {
+      options.relativeStrengthLookback = parseNonNegativeIntegerList(value, 'relativeStrengthLookback');
     } else {
       throw new Error(`Unknown option: ${key}`);
     }
@@ -348,6 +368,14 @@ const parseArgs = async (argv) => {
 
   if (options.marketRegimeMa.some((ma) => ma > 0) && !options.marketRegimeSymbol) {
     throw new Error('marketRegimeSymbol is required when marketRegimeMa is greater than 0');
+  }
+
+  if (!options.relativeStrengthLookback.length) {
+    throw new Error('At least one relativeStrengthLookback value is required');
+  }
+
+  if (options.relativeStrengthLookback.some((lookback) => lookback > 0) && !options.relativeStrengthSymbol) {
+    throw new Error('relativeStrengthSymbol is required when relativeStrengthLookback is greater than 0');
   }
 
   return options;
@@ -582,6 +610,11 @@ const summarizeResult = ({ range, symbols, options, result }) => {
     marketRegimeActiveDaysPct: round(result.marketRegime.activeDaysPct),
     marketRegimeBlockedEntries: result.marketRegime.blockedEntries,
     marketRegimeBlockedAdds: result.marketRegime.blockedAdds,
+    relativeStrengthSymbol: result.relativeStrength.symbol,
+    relativeStrengthLookback: result.relativeStrength.lookback,
+    relativeStrengthBlockedEntries: result.relativeStrength.blockedEntries,
+    relativeStrengthMissingBenchmarkDays: result.relativeStrength.missingBenchmarkDays,
+    relativeStrengthMissingSymbolMomentum: result.relativeStrength.missingSymbolMomentum,
     finalEquity: round(result.finalEquity),
     totalReturnPct: round(totalReturn),
     maxDrawdownPct: round(result.maxDrawdown),
@@ -645,6 +678,11 @@ const summarizeError = ({ range, symbols, options, error }) => ({
   marketRegimeActiveDaysPct: '',
   marketRegimeBlockedEntries: '',
   marketRegimeBlockedAdds: '',
+  relativeStrengthSymbol: options.relativeStrengthLookback > 0 ? options.relativeStrengthSymbol : '',
+  relativeStrengthLookback: options.relativeStrengthLookback,
+  relativeStrengthBlockedEntries: '',
+  relativeStrengthMissingBenchmarkDays: '',
+  relativeStrengthMissingSymbolMomentum: '',
   finalEquity: '',
   totalReturnPct: '',
   maxDrawdownPct: '',
@@ -739,6 +777,8 @@ const buildTradeRows = ({ range, options, trades }) => trades.map((trade) => ({
   gapAwareFills: options.gapAwareFills,
   marketRegimeSymbol: options.marketRegimeMa > 0 ? options.marketRegimeSymbol : '',
   marketRegimeMa: options.marketRegimeMa,
+  relativeStrengthSymbol: options.relativeStrengthLookback > 0 ? options.relativeStrengthSymbol : '',
+  relativeStrengthLookback: options.relativeStrengthLookback,
   volume: trade.volume,
   maxVolumeShares: Number.isFinite(trade.maxVolumeShares) ? trade.maxVolumeShares : '',
   volumeParticipationPct: round(trade.volumeParticipationPct),
@@ -772,6 +812,8 @@ const buildEquityRows = ({ range, options, result }) => result.equityCurve.map((
     marketRegimeSymbol: options.marketRegimeMa > 0 ? options.marketRegimeSymbol : '',
     marketRegimeMa: options.marketRegimeMa,
     marketRegimeActive: marketRegime.active ?? true,
+    relativeStrengthSymbol: options.relativeStrengthLookback > 0 ? options.relativeStrengthSymbol : '',
+    relativeStrengthLookback: options.relativeStrengthLookback,
     date: point.date,
     equity: round(point.equity),
     cash: round(point.cash),
@@ -818,6 +860,20 @@ const loadMarketRegimePrices = async ({ symbol, range, maPeriod }) => {
   });
 };
 
+const loadRelativeStrengthPrices = async ({ symbol, range, lookback }) => {
+  if (!symbol || lookback < 1) {
+    return null;
+  }
+
+  const warmupDays = Math.ceil(lookback * 2);
+  return dataProvider.getHistoricalPrices({
+    symbol,
+    from: subtractCalendarDays(range.from, warmupDays),
+    to: range.to,
+    interval: '1d',
+  });
+};
+
 const main = async () => {
   const options = await parseArgs(process.argv.slice(2));
   if (options.help) {
@@ -842,8 +898,10 @@ const main = async () => {
                     options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
                       options.gapAwareFills.forEach((gapAwareFills) => {
                         options.marketRegimeMa.forEach((marketRegimeMa) => {
-                          console.log(`${index}. ${range.from} to ${range.to} symbols=${options.symbols.length} riskPercent=${riskPercent} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} maxOpenPositions=${maxOpenPositions} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills} marketRegimeSymbol=${marketRegimeMa > 0 ? options.marketRegimeSymbol : ''} marketRegimeMa=${marketRegimeMa}`);
-                          index += 1;
+                          options.relativeStrengthLookback.forEach((relativeStrengthLookback) => {
+                            console.log(`${index}. ${range.from} to ${range.to} symbols=${options.symbols.length} riskPercent=${riskPercent} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} maxOpenPositions=${maxOpenPositions} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills} marketRegimeSymbol=${marketRegimeMa > 0 ? options.marketRegimeSymbol : ''} marketRegimeMa=${marketRegimeMa} relativeStrengthSymbol=${relativeStrengthLookback > 0 ? options.relativeStrengthSymbol : ''} relativeStrengthLookback=${relativeStrengthLookback}`);
+                            index += 1;
+                          });
                         });
                       });
                     });
@@ -878,18 +936,21 @@ const main = async () => {
                   options.maxVolumeParticipationPct.forEach((maxVolumeParticipationPct) => {
                     options.gapAwareFills.forEach((gapAwareFills) => {
                       options.marketRegimeMa.forEach((marketRegimeMa) => {
-                        combinations.push({
-                          range,
-                          riskPercent,
-                          entryPeriod,
-                          exitPeriod,
-                          maxUnits,
-                          maxOpenPositions,
-                          entryRank,
-                          slippageBps,
-                          maxVolumeParticipationPct,
-                          gapAwareFills,
-                          marketRegimeMa,
+                        options.relativeStrengthLookback.forEach((relativeStrengthLookback) => {
+                          combinations.push({
+                            range,
+                            riskPercent,
+                            entryPeriod,
+                            exitPeriod,
+                            maxUnits,
+                            maxOpenPositions,
+                            entryRank,
+                            slippageBps,
+                            maxVolumeParticipationPct,
+                            gapAwareFills,
+                            marketRegimeMa,
+                            relativeStrengthLookback,
+                          });
                         });
                       });
                     });
@@ -916,6 +977,7 @@ const main = async () => {
       maxVolumeParticipationPct,
       gapAwareFills,
       marketRegimeMa,
+      relativeStrengthLookback,
     } = combo;
     const runOptions = {
       ...options,
@@ -930,8 +992,10 @@ const main = async () => {
       gapAwareFills,
       marketRegimeSymbol: marketRegimeMa > 0 ? options.marketRegimeSymbol : '',
       marketRegimeMa,
+      relativeStrengthSymbol: relativeStrengthLookback > 0 ? options.relativeStrengthSymbol : '',
+      relativeStrengthLookback,
     };
-    const label = `${range.from} to ${range.to} symbols=${options.symbols.length} riskPercent=${riskPercent} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} maxOpenPositions=${maxOpenPositions} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills} marketRegimeSymbol=${marketRegimeMa > 0 ? options.marketRegimeSymbol : ''} marketRegimeMa=${marketRegimeMa}`;
+    const label = `${range.from} to ${range.to} symbols=${options.symbols.length} riskPercent=${riskPercent} entryPeriod=${entryPeriod} exitPeriod=${exitPeriod} maxUnits=${maxUnits} maxOpenPositions=${maxOpenPositions} entryRank=${entryRank} slippageBps=${slippageBps} maxVolumeParticipationPct=${maxVolumeParticipationPct} gapAwareFills=${gapAwareFills} marketRegimeSymbol=${marketRegimeMa > 0 ? options.marketRegimeSymbol : ''} marketRegimeMa=${marketRegimeMa} relativeStrengthSymbol=${relativeStrengthLookback > 0 ? options.relativeStrengthSymbol : ''} relativeStrengthLookback=${relativeStrengthLookback}`;
     process.stdout.write(`[${index + 1}/${combinations.length}] ${label} ... `);
 
     try {
@@ -943,6 +1007,11 @@ const main = async () => {
         symbol: options.marketRegimeSymbol,
         range,
         maPeriod: marketRegimeMa,
+      });
+      const relativeStrengthPrices = await loadRelativeStrengthPrices({
+        symbol: options.relativeStrengthSymbol,
+        range,
+        lookback: relativeStrengthLookback,
       });
       const result = portfolioStrategy.simulatePortfolioTrading({
         priceBySymbol,
@@ -961,6 +1030,9 @@ const main = async () => {
         marketRegimeSymbol: marketRegimeMa > 0 ? options.marketRegimeSymbol : null,
         marketRegimePrices,
         marketRegimeMa,
+        relativeStrengthSymbol: relativeStrengthLookback > 0 ? options.relativeStrengthSymbol : null,
+        relativeStrengthPrices,
+        relativeStrengthLookback,
       });
       rows.push(summarizeResult({
         range,
